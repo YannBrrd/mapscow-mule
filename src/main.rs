@@ -49,11 +49,7 @@ fn main() -> Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1200.0, 800.0])
             .with_min_inner_size([800.0, 600.0])
-            .with_icon(
-                // TODO: Add application icon
-                eframe::icon_data::from_png_bytes(&[])
-                    .unwrap_or_default()
-            ),
+            .with_icon(load_app_icon()),
         ..Default::default()
     };
 
@@ -64,4 +60,22 @@ fn main() -> Result<()> {
     ).map_err(|e| anyhow::anyhow!("Failed to run GUI: {}", e))?;
 
     Ok(())
+}
+
+/// Load the application icon from embedded PNG data
+fn load_app_icon() -> eframe::IconData {
+    // Include the PNG file at compile time
+    let icon_bytes = include_bytes!("../assets/icons/mapscow-mule.png");
+    
+    // Try to load the icon, fall back to default if it fails
+    match eframe::icon_data::from_png_bytes(icon_bytes) {
+        Ok(icon_data) => {
+            info!("Successfully loaded application icon");
+            icon_data
+        }
+        Err(e) => {
+            eprintln!("Failed to load application icon: {}", e);
+            eframe::IconData::default()
+        }
+    }
 }
