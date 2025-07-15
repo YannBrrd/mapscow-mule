@@ -127,8 +127,8 @@ impl MapView {
                 self.viewport.scale *= zoom_factor;
             }
             
-            // Clamp zoom level to allow for detailed street-level viewing
-            self.viewport.scale = self.viewport.scale.clamp(0.001, 50000.0);
+            // Clamp zoom level to allow for very detailed viewing
+            self.viewport.scale = self.viewport.scale.clamp(0.001, 500000.0);
         }
     }
     
@@ -426,9 +426,9 @@ impl MapView {
                     let scale_y = (self.viewport.height as f64 * 0.8) / data_height;
                     self.viewport.scale = scale_x.min(scale_y);
                     
-                    // Clamp the scale to allow for close zoom levels
-                    // For local maps (few km), we want scales from hundreds to tens of thousands for street details
-                    self.viewport.scale = self.viewport.scale.clamp(50.0, 50000.0);
+                    // Clamp the scale to allow for very detailed viewing
+                    // For local maps (few km), we want scales from hundreds to hundreds of thousands for building details
+                    self.viewport.scale = self.viewport.scale.clamp(50.0, 500000.0);
                 } else {
                     // For single points or very small areas, use a moderate zoom
                     self.viewport.scale = 1000.0;
@@ -680,8 +680,8 @@ impl MapView {
             let scale_y = (rect.height() as f64 * 0.9) / map_height;
             self.viewport.scale = scale_x.min(scale_y);
             
-            // Clamp to reasonable zoom levels
-            self.viewport.scale = self.viewport.scale.clamp(0.001, 50000.0);
+            // Clamp to very detailed zoom levels
+            self.viewport.scale = self.viewport.scale.clamp(0.001, 500000.0);
         }
     }
     
