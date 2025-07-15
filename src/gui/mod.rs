@@ -47,4 +47,4 @@ impl Default for GuiState {
 // Re-export GUI components
 pub use map_view::MapView;
 pub use style_editor::StyleEditor;
-pub use tool_panel::ToolPanel;
+pub use tool_panel::{ToolPanel, ToolPanelAction};

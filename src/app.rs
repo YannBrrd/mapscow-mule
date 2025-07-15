@@ -1,6 +1,6 @@
 use crate::core::MapData;
 use crate::export::{ExportFormat, ExportOptions, Exporter};
-use crate::gui::{GuiState, MapView, StyleEditor, ToolPanel, Tool};
+use crate::gui::{GuiState, MapView, StyleEditor, ToolPanel, ToolPanelAction, Tool};
 use crate::parsers::{osm::OsmParser, gpx::GpxParser, Parser};
 use crate::rendering::MapRenderer;
 use crate::styles::StyleManager;
@@ -251,7 +251,24 @@ impl eframe::App for MapscowMule {
         
         if self.gui_state.show_tool_panel {
             SidePanel::left("tool_panel").show(ctx, |ui| {
-                self.tool_panel.show(ui, &mut self.gui_state);
+                let action = self.tool_panel.show(ui, &mut self.gui_state);
+                
+                // Handle tool panel actions
+                match action {
+                    ToolPanelAction::ZoomIn => {
+                        self.map_view.zoom_by_factor(1.2);
+                    }
+                    ToolPanelAction::ZoomOut => {
+                        self.map_view.zoom_by_factor(1.0 / 1.2);
+                    }
+                    ToolPanelAction::FitToWindow => {
+                        self.map_view.zoom_to_fit(&self.map_data);
+                    }
+                    ToolPanelAction::None => {}
+                }
+                
+                // Update GUI state zoom level to match actual MapView zoom
+                self.gui_state.zoom_level = self.map_view.get_zoom_level() as f32;
             });
         }
         

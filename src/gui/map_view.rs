@@ -49,7 +49,7 @@ impl MapView {
     
     pub fn show(&mut self, ui: &mut Ui, map_data: &Option<MapData>, renderer: &MapRenderer, style_manager: &StyleManager) -> Response {
         let available_size = ui.available_size();
-        let (rect, response) = ui.allocate_exact_size(available_size, Sense::click_and_drag());
+        let (rect, response) = ui.allocate_exact_size(available_size, Sense::click_and_drag().union(Sense::hover()));
         
         // Update viewport size
         self.viewport.width = rect.width();
@@ -76,7 +76,52 @@ impl MapView {
         self.selection_mode
     }
     
+    /// Get current zoom level
+    pub fn get_zoom_level(&self) -> f64 {
+        self.viewport.scale
+    }
+
+    /// Zoom by a specific factor (e.g., 1.2 for zoom in, 0.83 for zoom out)
+    pub fn zoom_by_factor(&mut self, factor: f64) {
+        self.viewport.scale *= factor;
+        self.viewport.scale = self.viewport.scale.clamp(0.001, 500000.0);
+    }
+    
     fn handle_input(&mut self, ui: &mut Ui, response: &Response, rect: Rect) {
+        // Handle mouse wheel for zooming FIRST (should work in all modes)
+        let scroll_delta = ui.input(|i| i.smooth_scroll_delta);
+        if scroll_delta.y != 0.0 {
+            println!("Zoom event detected: scroll_delta.y = {}", scroll_delta.y);
+            let zoom_factor = if scroll_delta.y > 0.0 { 1.1 } else { 1.0 / 1.1 };
+            
+            // Zoom towards mouse position if available
+            if let Some(mouse_pos) = response.hover_pos() {
+                let rel_x = (mouse_pos.x - rect.center().x) as f64;
+                let rel_y = -(mouse_pos.y - rect.center().y) as f64; // Flip Y
+                
+                // Convert to map coordinates
+                let map_x = self.viewport.center_x + rel_x / self.viewport.scale;
+                let map_y = self.viewport.center_y + rel_y / self.viewport.scale;
+                
+                // Apply zoom
+                let old_scale = self.viewport.scale;
+                self.viewport.scale *= zoom_factor;
+                println!("Zoom applied: {} -> {}", old_scale, self.viewport.scale);
+                
+                // Adjust center to zoom towards mouse position
+                self.viewport.center_x = map_x - rel_x / self.viewport.scale;
+                self.viewport.center_y = map_y - rel_y / self.viewport.scale;
+            } else {
+                // Simple zoom at center
+                let old_scale = self.viewport.scale;
+                self.viewport.scale *= zoom_factor;
+                println!("Simple zoom applied: {} -> {}", old_scale, self.viewport.scale);
+            }
+            
+            // Clamp zoom level to allow for very detailed viewing
+            self.viewport.scale = self.viewport.scale.clamp(0.001, 500000.0);
+        }
+
         // Handle rectangle selection mode
         if self.selection_mode {
             self.handle_selection_input(response, rect);
@@ -101,67 +146,59 @@ impl MapView {
         } else {
             self.last_mouse_pos = None;
         }
-        
-        // Handle mouse wheel for zooming
-        let scroll_delta = ui.input(|i| i.raw_scroll_delta);
-        if scroll_delta.y != 0.0 {
-            let zoom_factor = if scroll_delta.y > 0.0 { 1.1 } else { 1.0 / 1.1 };
-            
-            // Zoom towards mouse position if available
-            if let Some(mouse_pos) = response.hover_pos() {
-                let rel_x = (mouse_pos.x - rect.center().x) as f64;
-                let rel_y = -(mouse_pos.y - rect.center().y) as f64; // Flip Y
-                
-                // Convert to map coordinates
-                let map_x = self.viewport.center_x + rel_x / self.viewport.scale;
-                let map_y = self.viewport.center_y + rel_y / self.viewport.scale;
-                
-                // Apply zoom
-                self.viewport.scale *= zoom_factor;
-                
-                // Adjust center to zoom towards mouse position
-                self.viewport.center_x = map_x - rel_x / self.viewport.scale;
-                self.viewport.center_y = map_y - rel_y / self.viewport.scale;
-            } else {
-                // Simple zoom at center
-                self.viewport.scale *= zoom_factor;
-            }
-            
-            // Clamp zoom level to allow for very detailed viewing
-            self.viewport.scale = self.viewport.scale.clamp(0.001, 500000.0);
-        }
     }
     
     fn draw_map(&self, ui: &mut Ui, rect: Rect, map_data: &Option<MapData>, renderer: &MapRenderer, style_manager: &StyleManager) {
         let painter = ui.painter_at(rect);
         
-        // Draw background
-        painter.rect_filled(rect, 0.0, Color32::from_rgb(240, 248, 255));
+        // Draw Google Maps-style background (light beige/gray)
+        painter.rect_filled(rect, 0.0, Color32::from_rgb(248, 246, 240));
         
         if let Some(data) = map_data {
             // Calculate visible bounds
             let visible_bounds = self.calculate_visible_bounds(rect);
             
-            // Debug: Draw some info about the data
-            let debug_text = format!(
-                "Nodes: {}, Ways: {}\nScale: {:.2}, Center: ({:.6}, {:.6})",
-                data.nodes.len(),
-                data.ways.len(),
-                self.viewport.scale,
-                self.viewport.center_x,
-                self.viewport.center_y
-            );
-            painter.text(
-                rect.min + egui::Vec2::new(10.0, 50.0),
-                egui::Align2::LEFT_TOP,
-                debug_text,
-                egui::FontId::monospace(10.0),
-                Color32::RED,
-            );
+            // Draw map features in proper order (like Google Maps)
+            // 1. Water bodies and areas (lowest layer)
+            self.draw_water_areas(ui, rect, data, &visible_bounds, style_manager);
             
-            // Draw map features
-            self.draw_ways(ui, rect, data, &visible_bounds, style_manager);
-            self.draw_nodes(ui, rect, data, &visible_bounds, style_manager);
+            // 2. Land use areas (parks, forests, etc.)
+            self.draw_landuse_areas(ui, rect, data, &visible_bounds, style_manager);
+            
+            // 3. Buildings (with shadows for 3D effect)
+            self.draw_buildings(ui, rect, data, &visible_bounds, style_manager);
+            
+            // 4. Road casings (dark outlines first)
+            self.draw_road_casings(ui, rect, data, &visible_bounds, style_manager);
+            
+            // 5. Road fills (lighter colors on top)
+            self.draw_road_fills(ui, rect, data, &visible_bounds, style_manager);
+            
+            // 6. Railways and other transport
+            self.draw_railways(ui, rect, data, &visible_bounds, style_manager);
+            
+            // 7. Points of interest
+            self.draw_points_of_interest(ui, rect, data, &visible_bounds, style_manager);
+            
+            // 8. Text labels (highest layer)
+            self.draw_text_labels(ui, rect, data, &visible_bounds, style_manager);
+            
+            // Debug info (smaller and less intrusive)
+            if self.viewport.scale > 1000.0 { // Only show at high zoom
+                let debug_text = format!(
+                    "Zoom: {:.1}x | Features: {}/{}", 
+                    self.viewport.scale,
+                    data.ways.len(),
+                    data.nodes.len()
+                );
+                painter.text(
+                    rect.min + egui::Vec2::new(10.0, rect.height() - 25.0),
+                    egui::Align2::LEFT_BOTTOM,
+                    debug_text,
+                    egui::FontId::monospace(9.0),
+                    Color32::from_gray(120),
+                );
+            }
         } else {
             // Draw placeholder text
             let text = "No map data loaded";
@@ -178,110 +215,8 @@ impl MapView {
         // Draw selection rectangle if active
         self.draw_selection_rectangle(ui, rect);
         
-        // Draw viewport info
+        // Draw viewport info (cleaner style)
         self.draw_viewport_info(ui, rect);
-    }
-    
-    fn draw_ways(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
-        let painter = ui.painter_at(rect);
-        
-        for way in map_data.ways.values() {
-            // Check if way is potentially visible
-            if !self.way_intersects_bounds(way, map_data, visible_bounds) {
-                continue;
-            }
-            
-            let points: Vec<Pos2> = way.nodes
-                .iter()
-                .filter_map(|&node_id| map_data.nodes.get(&node_id))
-                .map(|node| self.map_to_screen(node.lon, node.lat, rect))
-                .collect();
-            
-            if points.len() < 2 {
-                continue;
-            }
-            
-            // Determine drawing style based on tags and stylesheet
-            let (color, width) = self.get_way_style(way, style_manager);
-            
-            // Draw the way
-            if way.is_closed && points.len() > 2 {
-                // Draw as filled polygon
-                painter.add(egui::Shape::convex_polygon(
-                    points,
-                    Color32::from_rgba_unmultiplied(color.0, color.1, color.2, 100),
-                    egui::Stroke::new(width, Color32::from_rgb(color.0, color.1, color.2)),
-                ));
-            } else {
-                // Draw as line
-                painter.add(egui::Shape::line(
-                    points,
-                    egui::Stroke::new(width, Color32::from_rgb(color.0, color.1, color.2)),
-                ));
-            }
-        }
-    }
-    
-    fn draw_nodes(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
-        let painter = ui.painter_at(rect);
-        
-        let mut nodes_drawn = 0;
-        for node in map_data.nodes.values() {
-            // Draw ALL nodes for debugging, not just ones with tags
-            // if node.tags.is_empty() {
-            //     continue;
-            // }
-            
-            // Check if node is visible
-            if !self.point_in_bounds(node.lon, node.lat, visible_bounds) {
-                continue;
-            }
-            
-            nodes_drawn += 1;
-            let screen_pos = self.map_to_screen(node.lon, node.lat, rect);
-            let (color, size) = self.get_node_style(node, style_manager);
-            
-            // Draw node as circle
-            painter.circle_filled(
-                screen_pos,
-                size,
-                Color32::from_rgb(color.0, color.1, color.2),
-            );
-            
-            // Draw name if available and zoom level is high enough
-            if self.viewport.scale > 100.0 {
-                if let Some(name) = node.tags.get("name") {
-                    painter.text(
-                        screen_pos + Vec2::new(0.0, size + 2.0),
-                        egui::Align2::CENTER_TOP,
-                        name,
-                        egui::FontId::proportional(10.0),
-                        Color32::BLACK,
-                    );
-                }
-            }
-        }
-    }
-    
-    fn draw_viewport_info(&self, ui: &mut Ui, rect: Rect) {
-        let painter = ui.painter_at(rect);
-        
-        // Draw zoom level and coordinates in corner
-        let info_text = format!(
-            "Zoom: {:.1}x\nCenter: {:.6}, {:.6}",
-            self.viewport.scale,
-            self.viewport.center_x,
-            self.viewport.center_y
-        );
-        
-        let text_pos = rect.min + Vec2::new(10.0, 10.0);
-        painter.text(
-            text_pos,
-            egui::Align2::LEFT_TOP,
-            info_text,
-            egui::FontId::monospace(10.0),
-            Color32::BLACK,
-        );
     }
     
     fn map_to_screen(&self, lon: f64, lat: f64, rect: Rect) -> Pos2 {
@@ -760,5 +695,464 @@ impl MapView {
                 Color32::from_rgb(0, 120, 255)
             );
         }
+    }
+    
+    // Google Maps-style specialized drawing methods
+    
+    fn draw_water_areas(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
+        let painter = ui.painter_at(rect);
+        
+        for way in map_data.ways.values() {
+            if !self.way_intersects_bounds(way, map_data, visible_bounds) {
+                continue;
+            }
+            
+            // Check if it's a water feature
+            let is_water = way.tags.get("natural") == Some(&"water".to_string()) ||
+                          way.tags.get("waterway").is_some() ||
+                          way.tags.get("water").is_some();
+            
+            if is_water && way.is_closed {
+                let points: Vec<Pos2> = way.nodes
+                    .iter()
+                    .filter_map(|&node_id| map_data.nodes.get(&node_id))
+                    .map(|node| self.map_to_screen(node.lon, node.lat, rect))
+                    .collect();
+                
+                if points.len() > 2 {
+                    // Google Maps water color: light blue
+                    painter.add(egui::Shape::convex_polygon(
+                        points,
+                        Color32::from_rgb(170, 218, 255), // Light blue fill
+                        egui::Stroke::new(1.0, Color32::from_rgb(110, 180, 240)), // Slightly darker border
+                    ));
+                }
+            }
+        }
+    }
+    
+    fn draw_landuse_areas(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
+        let painter = ui.painter_at(rect);
+        
+        for way in map_data.ways.values() {
+            if !self.way_intersects_bounds(way, map_data, visible_bounds) || !way.is_closed {
+                continue;
+            }
+            
+            // Check if this way has landuse, leisure, or natural tags we care about
+            let mut should_draw = false;
+            let mut fill_color = Color32::TRANSPARENT;
+            let mut stroke_color = Color32::TRANSPARENT;
+            
+            if let Some(landuse) = way.tags.get("landuse") {
+                match landuse.as_str() {
+                    "forest" | "wood" => {
+                        fill_color = Color32::from_rgb(200, 220, 188);
+                        stroke_color = Color32::from_rgb(180, 200, 168);
+                        should_draw = true;
+                    },
+                    "grass" | "meadow" => {
+                        fill_color = Color32::from_rgb(220, 240, 200);
+                        stroke_color = Color32::from_rgb(200, 220, 180);
+                        should_draw = true;
+                    },
+                    "residential" => {
+                        fill_color = Color32::from_rgb(240, 240, 235);
+                        stroke_color = Color32::from_rgb(220, 220, 215);
+                        should_draw = true;
+                    },
+                    "commercial" => {
+                        fill_color = Color32::from_rgb(245, 240, 235);
+                        stroke_color = Color32::from_rgb(225, 220, 215);
+                        should_draw = true;
+                    },
+                    "industrial" => {
+                        fill_color = Color32::from_rgb(235, 235, 240);
+                        stroke_color = Color32::from_rgb(215, 215, 220);
+                        should_draw = true;
+                    },
+                    _ => {}
+                }
+            } else if let Some(leisure) = way.tags.get("leisure") {
+                match leisure.as_str() {
+                    "park" | "garden" => {
+                        fill_color = Color32::from_rgb(200, 240, 200);
+                        stroke_color = Color32::from_rgb(180, 220, 180);
+                        should_draw = true;
+                    },
+                    "playground" => {
+                        fill_color = Color32::from_rgb(255, 245, 220);
+                        stroke_color = Color32::from_rgb(235, 225, 200);
+                        should_draw = true;
+                    },
+                    _ => {}
+                }
+            } else if let Some(natural) = way.tags.get("natural") {
+                match natural.as_str() {
+                    "wood" | "forest" => {
+                        fill_color = Color32::from_rgb(200, 220, 188);
+                        stroke_color = Color32::from_rgb(180, 200, 168);
+                        should_draw = true;
+                    },
+                    "grassland" => {
+                        fill_color = Color32::from_rgb(220, 240, 200);
+                        stroke_color = Color32::from_rgb(200, 220, 180);
+                        should_draw = true;
+                    },
+                    _ => {}
+                }
+            }
+            
+            if !should_draw {
+                continue;
+            }
+            
+            let points: Vec<Pos2> = way.nodes
+                .iter()
+                .filter_map(|&node_id| map_data.nodes.get(&node_id))
+                .map(|node| self.map_to_screen(node.lon, node.lat, rect))
+                .collect();
+            
+            if points.len() > 2 {
+                painter.add(egui::Shape::convex_polygon(
+                    points,
+                    fill_color,
+                    egui::Stroke::new(0.5, stroke_color),
+                ));
+            }
+        }
+    }
+    
+    fn draw_buildings(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
+        let painter = ui.painter_at(rect);
+        
+        for way in map_data.ways.values() {
+            if !self.way_intersects_bounds(way, map_data, visible_bounds) {
+                continue;
+            }
+            
+            if way.tags.contains_key("building") && way.is_closed {
+                let points: Vec<Pos2> = way.nodes
+                    .iter()
+                    .filter_map(|&node_id| map_data.nodes.get(&node_id))
+                    .map(|node| self.map_to_screen(node.lon, node.lat, rect))
+                    .collect();
+                
+                if points.len() > 2 {
+                    // Google Maps building style: light gray with subtle shadow effect
+                    let building_color = Color32::from_rgb(228, 228, 228);
+                    let building_stroke = Color32::from_rgb(200, 200, 200);
+                    
+                    // Draw shadow first (slightly offset)
+                    if self.viewport.scale > 5000.0 { // Only at high zoom levels
+                        let shadow_points: Vec<Pos2> = points.iter()
+                            .map(|p| Pos2::new(p.x + 1.0, p.y + 1.0))
+                            .collect();
+                        painter.add(egui::Shape::convex_polygon(
+                            shadow_points,
+                            Color32::from_rgba_unmultiplied(0, 0, 0, 20), // Subtle shadow
+                            egui::Stroke::NONE,
+                        ));
+                    }
+                    
+                    // Draw building
+                    painter.add(egui::Shape::convex_polygon(
+                        points,
+                        building_color,
+                        egui::Stroke::new(0.5, building_stroke),
+                    ));
+                }
+            }
+        }
+    }
+    
+    fn draw_road_casings(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
+        let painter = ui.painter_at(rect);
+        
+        for way in map_data.ways.values() {
+            if !self.way_intersects_bounds(way, map_data, visible_bounds) {
+                continue;
+            }
+            
+            if let Some(highway) = way.tags.get("highway") {
+                let (casing_width, casing_color) = self.get_road_casing_style(highway);
+                
+                if casing_width > 0.0 {
+                    let points: Vec<Pos2> = way.nodes
+                        .iter()
+                        .filter_map(|&node_id| map_data.nodes.get(&node_id))
+                        .map(|node| self.map_to_screen(node.lon, node.lat, rect))
+                        .collect();
+                    
+                    if points.len() >= 2 {
+                        painter.add(egui::Shape::line(
+                            points,
+                            egui::Stroke::new(casing_width, casing_color),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    
+    fn draw_road_fills(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
+        let painter = ui.painter_at(rect);
+        
+        for way in map_data.ways.values() {
+            if !self.way_intersects_bounds(way, map_data, visible_bounds) {
+                continue;
+            }
+            
+            if let Some(highway) = way.tags.get("highway") {
+                let (width, color) = self.get_road_fill_style(highway);
+                
+                let points: Vec<Pos2> = way.nodes
+                    .iter()
+                    .filter_map(|&node_id| map_data.nodes.get(&node_id))
+                    .map(|node| self.map_to_screen(node.lon, node.lat, rect))
+                    .collect();
+                
+                if points.len() >= 2 {
+                    painter.add(egui::Shape::line(
+                        points,
+                        egui::Stroke::new(width, color),
+                    ));
+                }
+            }
+        }
+    }
+    
+    fn draw_railways(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
+        let painter = ui.painter_at(rect);
+        
+        for way in map_data.ways.values() {
+            if !self.way_intersects_bounds(way, map_data, visible_bounds) {
+                continue;
+            }
+            
+            if way.tags.get("railway").is_some() {
+                let points: Vec<Pos2> = way.nodes
+                    .iter()
+                    .filter_map(|&node_id| map_data.nodes.get(&node_id))
+                    .map(|node| self.map_to_screen(node.lon, node.lat, rect))
+                    .collect();
+                
+                if points.len() >= 2 {
+                    // Draw railway as dashed line
+                    painter.add(egui::Shape::dashed_line(
+                        &points,
+                        egui::Stroke::new(2.0, Color32::from_rgb(120, 120, 120)),
+                        10.0,
+                        5.0,
+                    ));
+                }
+            }
+        }
+    }
+    
+    fn draw_points_of_interest(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
+        let painter = ui.painter_at(rect);
+        
+        // Only draw POIs at reasonable zoom levels
+        if self.viewport.scale < 1000.0 {
+            return;
+        }
+        
+        for node in map_data.nodes.values() {
+            if !self.point_in_bounds(node.lon, node.lat, visible_bounds) {
+                continue;
+            }
+            
+            let screen_pos = self.map_to_screen(node.lon, node.lat, rect);
+            let (color, size, icon) = self.get_poi_style(node);
+            
+            if size > 0.0 {
+                // Draw POI marker with Google Maps-style appearance
+                painter.circle_filled(
+                    screen_pos,
+                    size + 1.0, // Slightly larger background
+                    Color32::WHITE, // White background
+                );
+                painter.circle_filled(
+                    screen_pos,
+                    size,
+                    color,
+                );
+                
+                // Draw icon or letter if available
+                if let Some(icon_text) = icon {
+                    painter.text(
+                        screen_pos,
+                        egui::Align2::CENTER_CENTER,
+                        icon_text,
+                        egui::FontId::proportional(8.0),
+                        Color32::WHITE,
+                    );
+                }
+            }
+        }
+    }
+    
+    fn draw_text_labels(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
+        let painter = ui.painter_at(rect);
+        
+        // Only show labels at higher zoom levels
+        if self.viewport.scale < 2000.0 {
+            return;
+        }
+        
+        for way in map_data.ways.values() {
+            if !self.way_intersects_bounds(way, map_data, visible_bounds) {
+                continue;
+            }
+            
+            if let Some(name) = way.tags.get("name") {
+                // Calculate center point for label
+                let center_node_id = way.nodes.get(way.nodes.len() / 2).copied();
+                if let Some(node_id) = center_node_id {
+                    if let Some(node) = map_data.nodes.get(&node_id) {
+                        let screen_pos = self.map_to_screen(node.lon, node.lat, rect);
+                        
+                        let (font_size, font_color) = self.get_label_style(way);
+                        
+                        // Draw text with subtle background for readability
+                        painter.text(
+                            screen_pos + Vec2::new(0.0, -2.0),
+                            egui::Align2::CENTER_CENTER,
+                            name,
+                            egui::FontId::proportional(font_size),
+                            font_color,
+                        );
+                    }
+                }
+            }
+        }
+        
+        // Draw node labels (POI names)
+        if self.viewport.scale > 5000.0 {
+            for node in map_data.nodes.values() {
+                if !self.point_in_bounds(node.lon, node.lat, visible_bounds) {
+                    continue;
+                }
+                
+                if let Some(name) = node.tags.get("name") {
+                    if node.tags.contains_key("amenity") || node.tags.contains_key("shop") || node.tags.contains_key("tourism") {
+                        let screen_pos = self.map_to_screen(node.lon, node.lat, rect);
+                        
+                        painter.text(
+                            screen_pos + Vec2::new(8.0, 0.0), // Offset to the right of POI marker
+                            egui::Align2::LEFT_CENTER,
+                            name,
+                            egui::FontId::proportional(9.0),
+                            Color32::from_rgb(60, 60, 60),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    
+    // Google Maps-style helper methods for styling
+    
+    fn get_road_casing_style(&self, highway: &str) -> (f32, Color32) {
+        match highway {
+            "motorway" => (8.0, Color32::from_rgb(140, 100, 0)),
+            "trunk" => (7.0, Color32::from_rgb(160, 120, 0)),
+            "primary" => (6.0, Color32::from_rgb(180, 140, 0)),
+            "secondary" => (5.0, Color32::from_rgb(180, 160, 80)),
+            "tertiary" => (4.0, Color32::from_rgb(180, 180, 120)),
+            "residential" => (3.5, Color32::from_rgb(200, 200, 200)),
+            "service" => (2.5, Color32::from_rgb(210, 210, 210)),
+            _ => (0.0, Color32::TRANSPARENT), // No casing for minor roads
+        }
+    }
+    
+    fn get_road_fill_style(&self, highway: &str) -> (f32, Color32) {
+        match highway {
+            "motorway" => (6.0, Color32::from_rgb(231, 170, 56)), // Orange
+            "trunk" => (5.5, Color32::from_rgb(255, 196, 56)), // Light orange
+            "primary" => (5.0, Color32::from_rgb(255, 220, 56)), // Yellow
+            "secondary" => (4.0, Color32::from_rgb(255, 240, 120)), // Light yellow
+            "tertiary" => (3.5, Color32::WHITE), // White
+            "residential" => (3.0, Color32::WHITE), // White
+            "service" => (2.0, Color32::from_rgb(245, 245, 245)), // Very light gray
+            "footway" | "path" => (1.5, Color32::from_rgb(220, 180, 140)), // Brown
+            "cycleway" => (1.5, Color32::from_rgb(100, 150, 255)), // Blue
+            _ => (2.0, Color32::from_rgb(230, 230, 230)), // Light gray default
+        }
+    }
+    
+    fn get_poi_style(&self, node: &crate::core::Node) -> (Color32, f32, Option<String>) {
+        if let Some(amenity) = node.tags.get("amenity") {
+            match amenity.as_str() {
+                "restaurant" | "cafe" | "fast_food" => (Color32::from_rgb(220, 80, 40), 4.0, Some("🍽".to_string())),
+                "hospital" => (Color32::from_rgb(220, 20, 60), 5.0, Some("H".to_string())),
+                "school" => (Color32::from_rgb(100, 150, 255), 4.0, Some("🎓".to_string())),
+                "bank" => (Color32::from_rgb(50, 150, 50), 4.0, Some("$".to_string())),
+                "fuel" => (Color32::from_rgb(255, 150, 0), 4.0, Some("⛽".to_string())),
+                _ => (Color32::from_rgb(150, 150, 150), 3.0, None),
+            }
+        } else if let Some(shop) = node.tags.get("shop") {
+            (Color32::from_rgb(100, 150, 255), 3.5, Some("🛍".to_string()))
+        } else if let Some(tourism) = node.tags.get("tourism") {
+            match tourism.as_str() {
+                "hotel" => (Color32::from_rgb(150, 100, 200), 4.0, Some("🏨".to_string())),
+                "museum" => (Color32::from_rgb(200, 150, 100), 4.0, Some("🏛".to_string())),
+                "attraction" => (Color32::from_rgb(255, 100, 150), 4.0, Some("★".to_string())),
+                _ => (Color32::from_rgb(200, 100, 150), 3.5, None),
+            }
+        } else {
+            (Color32::TRANSPARENT, 0.0, None) // Don't draw regular nodes
+        }
+    }
+    
+    fn get_label_style(&self, way: &crate::core::Way) -> (f32, Color32) {
+        if let Some(highway) = way.tags.get("highway") {
+            match highway.as_str() {
+                "motorway" | "trunk" => (11.0, Color32::WHITE),
+                "primary" => (10.0, Color32::BLACK),
+                "secondary" | "tertiary" => (9.0, Color32::from_rgb(60, 60, 60)),
+                _ => (8.0, Color32::from_rgb(80, 80, 80)),
+            }
+        } else if way.tags.contains_key("building") {
+            (8.0, Color32::from_rgb(100, 100, 100))
+        } else {
+            (8.0, Color32::from_rgb(80, 80, 80))
+        }
+    }
+    
+    fn draw_viewport_info(&self, ui: &mut Ui, rect: Rect) {
+        let painter = ui.painter_at(rect);
+        
+        // Draw scale info in bottom-right corner (Google Maps style)
+        let scale_text = format!("{:.0}m/px", 1.0 / self.viewport.scale * 111320.0); // Approximate meters per pixel
+        
+        let text_pos = rect.max - Vec2::new(15.0, 15.0);
+        
+        // Draw semi-transparent background
+        let text_size = painter.layout_no_wrap(
+            scale_text.clone(),
+            egui::FontId::monospace(9.0),
+            Color32::WHITE,
+        ).rect.size();
+        
+        let bg_rect = Rect::from_min_size(
+            text_pos - Vec2::new(text_size.x + 6.0, text_size.y + 4.0),
+            text_size + Vec2::new(8.0, 6.0),
+        );
+        
+        painter.rect_filled(
+            bg_rect,
+            3.0,
+            Color32::from_rgba_unmultiplied(0, 0, 0, 160),
+        );
+        
+        painter.text(
+            text_pos - Vec2::new(text_size.x + 2.0, text_size.y + 1.0),
+            egui::Align2::LEFT_TOP,
+            scale_text,
+            egui::FontId::monospace(9.0),
+            Color32::WHITE,
+        );
     }
 }

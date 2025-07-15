@@ -1,6 +1,14 @@
 use crate::gui::{GuiState, Tool};
 use egui::Ui;
 
+#[derive(Debug, Clone)]
+pub enum ToolPanelAction {
+    ZoomIn,
+    ZoomOut,
+    FitToWindow,
+    None,
+}
+
 /// Tool panel for map interaction tools
 pub struct ToolPanel;
 
@@ -9,7 +17,8 @@ impl ToolPanel {
         Self
     }
     
-    pub fn show(&mut self, ui: &mut Ui, gui_state: &mut GuiState) {
+    pub fn show(&mut self, ui: &mut Ui, gui_state: &mut GuiState) -> ToolPanelAction {
+        let mut action = ToolPanelAction::None;
         ui.heading("Tools");
         ui.separator();
         
@@ -68,19 +77,17 @@ impl ToolPanel {
             
             ui.horizontal(|ui| {
                 if ui.button("🔍+").clicked() {
-                    gui_state.zoom_level *= 1.2;
+                    action = ToolPanelAction::ZoomIn;
                 }
                 if ui.button("🔍-").clicked() {
-                    gui_state.zoom_level /= 1.2;
+                    action = ToolPanelAction::ZoomOut;
                 }
             });
             
             ui.label(format!("Level: {:.1}x", gui_state.zoom_level));
             
             if ui.button("🎯 Fit to Window").clicked() {
-                // TODO: Implement zoom to fit
-                gui_state.zoom_level = 1.0;
-                gui_state.pan_offset = (0.0, 0.0);
+                action = ToolPanelAction::FitToWindow;
             }
         });
         
@@ -128,6 +135,8 @@ impl ToolPanel {
             ui.label("🛣 Ways: 0");
             ui.label("🔗 Relations: 0");
         });
+        
+        action
     }
 }
 
