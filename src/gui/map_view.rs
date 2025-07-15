@@ -19,6 +19,7 @@ pub struct MapView {
 struct SelectionRect {
     start_pos: Pos2,
     current_pos: Pos2,
+    has_been_dragged: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -341,16 +342,10 @@ impl MapView {
                     // Apply line width from rule
                     width = rule.style.line_width;
                     
-                    // Debug: print what matched
-                    // println!("Way {} matched rule with color {:?}, width {}", way.id, color, width);
-                    
                     return (color, width);
                 }
             }
         }
-        
-        // Debug: print fallback for ways
-        // println!("Way {} using fallback style, tags: {:?}", way.id, way.tags);
         
         // Fallback to hardcoded styles if no stylesheet rules match
         if let Some(highway) = way.tags.get("highway") {
@@ -395,16 +390,10 @@ impl MapView {
                         size = rule.style.line_width;
                     }
                     
-                    // Debug: print what matched
-                    // println!("Node {} matched rule with color {:?}, size {}", node.id, color, size);
-                    
                     return (color, size);
                 }
             }
         }
-        
-        // Debug: print fallback for nodes
-        // println!("Node {} using fallback style, tags: {:?}", node.id, node.tags);
         
         // Fallback to hardcoded styles if no stylesheet rules match
         if node.tags.contains_key("amenity") {
@@ -440,17 +429,10 @@ impl MapView {
                     // Clamp the scale to allow for close zoom levels
                     // For local maps (few km), we want scales from hundreds to tens of thousands for street details
                     self.viewport.scale = self.viewport.scale.clamp(50.0, 50000.0);
-                    
-                    println!("Calculated scale: scale_x={:.1}, scale_y={:.1}, final_scale={:.1}", 
-                        scale_x, scale_y, self.viewport.scale);
                 } else {
                     // For single points or very small areas, use a moderate zoom
                     self.viewport.scale = 1000.0;
                 }
-                
-                println!("Zoom to fit: center=({:.6}, {:.6}), scale={:.1}, bounds=({:.6}, {:.6}) to ({:.6}, {:.6})", 
-                    self.viewport.center_x, self.viewport.center_y, self.viewport.scale,
-                    bounds.min_lon, bounds.min_lat, bounds.max_lon, bounds.max_lat);
             }
         } else {
             // No data, reset to default
@@ -489,8 +471,6 @@ impl MapView {
         let median_lat = lats[lats.len() / 2];
         let median_lon = lons[lons.len() / 2];
         
-        println!("Median coordinates: lat={:.6}, lon={:.6}", median_lat, median_lon);
-        
         // Second pass: exclude extreme outliers based on distance from median
         let mut min_lon = f64::INFINITY;
         let mut max_lon = f64::NEG_INFINITY;
@@ -516,8 +496,6 @@ impl MapView {
             
             // Exclude extreme outliers that are too far from the median
             if lat_distance > max_distance_from_median || lon_distance > max_distance_from_median {
-                println!("Excluding outlier: lat={:.6}, lon={:.6} (distance from median: lat={:.6}, lon={:.6})", 
-                    node.lat, node.lon, lat_distance, lon_distance);
                 outlier_count += 1;
                 continue;
             }
@@ -534,7 +512,6 @@ impl MapView {
         
         // Check if we have valid bounds
         if min_lon == f64::INFINITY {
-            println!("No valid coordinates found after filtering!");
             return None;
         }
         
@@ -547,8 +524,6 @@ impl MapView {
             min_lat -= 0.0005;
             max_lat += 0.0005;
         }
-        
-        println!("Final calculated bounds: ({:.6}, {:.6}) to ({:.6}, {:.6})", min_lon, min_lat, max_lon, max_lat);
         
         Some(VisibleBounds {
             min_lon,
@@ -637,12 +612,16 @@ impl MapView {
                     self.selection_rect = Some(SelectionRect {
                         start_pos: mouse_pos,
                         current_pos: mouse_pos,
+                        has_been_dragged: false,
                     });
                 }
             }
         } else if response.dragged() {
             // Update selection rectangle
             if let (Some(ref mut selection), Some(mouse_pos)) = (&mut self.selection_rect, response.interact_pointer_pos()) {
+                // Mark that we've actually dragged
+                selection.has_been_dragged = true;
+                
                 // Clamp mouse position to map bounds
                 let clamped_pos = Pos2::new(
                     mouse_pos.x.clamp(rect.min.x, rect.max.x),
@@ -651,11 +630,16 @@ impl MapView {
                 selection.current_pos = clamped_pos;
             }
         } else if response.drag_stopped() {
-            // Complete selection and zoom to area
-            if let Some(selection) = self.selection_rect.take() { // Use take() to move the value out
-                self.zoom_to_selection(&selection, rect);
-                self.selection_mode = false; // Exit selection mode after zoom
-                println!("Rectangle zoom selection completed");
+            // Complete selection and zoom to area - but only if we actually dragged
+            if let Some(selection) = self.selection_rect.take() {
+                if selection.has_been_dragged {
+                    self.zoom_to_selection(&selection, rect);
+                    self.selection_mode = false; // Exit selection mode after zoom
+                    println!("Rectangle zoom selection completed");
+                } else {
+                    // Single click without drag - do nothing
+                    println!("Single click detected, no zoom action");
+                }
             }
         }
         
@@ -685,7 +669,6 @@ impl MapView {
         let selection_height = max_y - min_y;
         
         if selection_width < 10.0 || selection_height < 10.0 {
-            println!("Selection too small, ignoring zoom request");
             return;
         }
         
@@ -714,72 +697,76 @@ impl MapView {
             
             // Clamp to reasonable zoom levels
             self.viewport.scale = self.viewport.scale.clamp(0.001, 50000.0);
-            
-            println!("Zoomed to selection: center=({:.6}, {:.6}), scale={:.1}", 
-                self.viewport.center_x, self.viewport.center_y, self.viewport.scale);
         }
     }
     
     fn draw_selection_rectangle(&self, ui: &mut Ui, rect: Rect) {
         if let Some(selection) = &self.selection_rect {
-            let painter = ui.painter_at(rect);
-            
-            let min_x = selection.start_pos.x.min(selection.current_pos.x);
-            let max_x = selection.start_pos.x.max(selection.current_pos.x);
-            let min_y = selection.start_pos.y.min(selection.current_pos.y);
-            let max_y = selection.start_pos.y.max(selection.current_pos.y);
-            
-            let selection_rect = Rect::from_min_max(
-                Pos2::new(min_x, min_y),
-                Pos2::new(max_x, max_y)
-            );
-            
-            // Draw selection rectangle with semi-transparent fill and border
-            painter.rect(
-                selection_rect,
-                2.0,
-                Color32::from_rgba_unmultiplied(0, 150, 255, 50), // Light blue with transparency
-                egui::Stroke::new(2.0, Color32::from_rgb(0, 120, 255)) // Blue border
-            );
-            
-            // Draw corner markers for better visibility
-            let corner_size = 4.0;
-            let corner_color = Color32::from_rgb(0, 120, 255);
-            
-            // Top-left corner
-            painter.rect_filled(
-                Rect::from_center_size(Pos2::new(min_x, min_y), Vec2::splat(corner_size)),
-                0.0,
-                corner_color
-            );
-            
-            // Top-right corner
-            painter.rect_filled(
-                Rect::from_center_size(Pos2::new(max_x, min_y), Vec2::splat(corner_size)),
-                0.0,
-                corner_color
-            );
-            
-            // Bottom-left corner
-            painter.rect_filled(
-                Rect::from_center_size(Pos2::new(min_x, max_y), Vec2::splat(corner_size)),
-                0.0,
-                corner_color
-            );
-            
-            // Bottom-right corner
-            painter.rect_filled(
-                Rect::from_center_size(Pos2::new(max_x, max_y), Vec2::splat(corner_size)),
-                0.0,
-                corner_color
-            );
+            // Only draw the rectangle if it has been dragged (not just a single click)
+            if selection.has_been_dragged {
+                let painter = ui.painter_at(rect);
+                
+                let min_x = selection.start_pos.x.min(selection.current_pos.x);
+                let max_x = selection.start_pos.x.max(selection.current_pos.x);
+                let min_y = selection.start_pos.y.min(selection.current_pos.y);
+                let max_y = selection.start_pos.y.max(selection.current_pos.y);
+                
+                let selection_rect = Rect::from_min_max(
+                    Pos2::new(min_x, min_y),
+                    Pos2::new(max_x, max_y)
+                );
+                
+                // Draw selection rectangle with semi-transparent fill and border
+                painter.rect(
+                    selection_rect,
+                    2.0,
+                    Color32::from_rgba_unmultiplied(0, 150, 255, 50), // Light blue with transparency
+                    egui::Stroke::new(2.0, Color32::from_rgb(0, 120, 255)) // Blue border
+                );
+                
+                // Draw corner markers for better visibility
+                let corner_size = 4.0;
+                let corner_color = Color32::from_rgb(0, 120, 255);
+                
+                // Top-left corner
+                painter.rect_filled(
+                    Rect::from_center_size(Pos2::new(min_x, min_y), Vec2::splat(corner_size)),
+                    0.0,
+                    corner_color
+                );
+                
+                // Top-right corner
+                painter.rect_filled(
+                    Rect::from_center_size(Pos2::new(max_x, min_y), Vec2::splat(corner_size)),
+                    0.0,
+                    corner_color
+                );
+                
+                // Bottom-left corner
+                painter.rect_filled(
+                    Rect::from_center_size(Pos2::new(min_x, max_y), Vec2::splat(corner_size)),
+                    0.0,
+                    corner_color
+                );
+                
+                // Bottom-right corner
+                painter.rect_filled(
+                    Rect::from_center_size(Pos2::new(max_x, max_y), Vec2::splat(corner_size)),
+                    0.0,
+                    corner_color
+                );
+            }
         }
         
         // Show instruction text when in selection mode
         if self.selection_mode {
             let painter = ui.painter_at(rect);
-            let instruction_text = if self.selection_rect.is_some() {
-                "Drag to select area, release to zoom"
+            let instruction_text = if let Some(selection) = &self.selection_rect {
+                if selection.has_been_dragged {
+                    "Drag to select area, release to zoom"
+                } else {
+                    "Drag to select area (single clicks do nothing)"
+                }
             } else {
                 "Click and drag to select zoom area"
             };
