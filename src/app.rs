@@ -122,10 +122,17 @@ impl MapscowMule {
         if let Some(ref map_data) = self.map_data {
             self.status_message = "Exporting map...".to_string();
             
-            let styled_map = self.style_manager.apply_styles(map_data)?;
-            let rendered_map = self.renderer.render(&styled_map, &options)?;
+            // Get viewport information from MapView
+            let (center_lon, center_lat, scale) = self.map_view.get_viewport_info();
             
-            match self.exporter.export_map(map_data, &self.renderer, &options) {
+            match self.exporter.export_map_with_viewport(
+                map_data, 
+                &self.renderer, 
+                &options,
+                center_lat,
+                center_lon,
+                scale,
+            ) {
                 Ok(_) => {
                     self.status_message = "Map exported successfully".to_string();
                     Ok(())
@@ -263,6 +270,45 @@ impl eframe::App for MapscowMule {
                     }
                     ToolPanelAction::FitToWindow => {
                         self.map_view.zoom_to_fit(&self.map_data);
+                    }
+                    ToolPanelAction::ExportSvg => {
+                        if let Some(path) = crate::utils::file_dialog::FileDialog::save_file("Export as SVG", "map.svg", &[crate::utils::file_dialog::FileFilters::SVG]) {
+                            let options = crate::export::ExportOptions::new(crate::export::ExportFormat::Svg, path.to_string_lossy().to_string());
+                            match self.export_map(crate::export::ExportFormat::Svg, options) {
+                                Ok(_) => {
+                                    self.status_message = "SVG exported successfully".to_string();
+                                }
+                                Err(e) => {
+                                    self.status_message = format!("Error exporting SVG: {}", e);
+                                }
+                            }
+                        }
+                    }
+                    ToolPanelAction::ExportPng => {
+                        if let Some(path) = crate::utils::file_dialog::FileDialog::save_file("Export as PNG", "map.png", &[crate::utils::file_dialog::FileFilters::PNG]) {
+                            let options = crate::export::ExportOptions::new(crate::export::ExportFormat::Png, path.to_string_lossy().to_string());
+                            match self.export_map(crate::export::ExportFormat::Png, options) {
+                                Ok(_) => {
+                                    self.status_message = "PNG exported successfully".to_string();
+                                }
+                                Err(e) => {
+                                    self.status_message = format!("Error exporting PNG: {}", e);
+                                }
+                            }
+                        }
+                    }
+                    ToolPanelAction::ExportPdf => {
+                        if let Some(path) = crate::utils::file_dialog::FileDialog::save_file("Export as PDF", "map.pdf", &[("PDF files", &["pdf"])]) {
+                            let options = crate::export::ExportOptions::new(crate::export::ExportFormat::Pdf, path.to_string_lossy().to_string());
+                            match self.export_map(crate::export::ExportFormat::Pdf, options) {
+                                Ok(_) => {
+                                    self.status_message = "PDF exported successfully".to_string();
+                                }
+                                Err(e) => {
+                                    self.status_message = format!("Error exporting PDF: {}", e);
+                                }
+                            }
+                        }
                     }
                     ToolPanelAction::None => {}
                 }

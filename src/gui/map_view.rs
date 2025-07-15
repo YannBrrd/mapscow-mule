@@ -87,6 +87,11 @@ impl MapView {
         self.viewport.scale = self.viewport.scale.clamp(0.001, 500000.0);
     }
     
+    /// Get viewport information for export (center coordinates and scale)
+    pub fn get_viewport_info(&self) -> (f64, f64, f64) {
+        (self.viewport.center_x, self.viewport.center_y, self.viewport.scale)
+    }
+
     fn handle_input(&mut self, ui: &mut Ui, response: &Response, rect: Rect) {
         // Handle mouse wheel for zooming FIRST (should work in all modes)
         let scroll_delta = ui.input(|i| i.smooth_scroll_delta);

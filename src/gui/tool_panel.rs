@@ -6,6 +6,9 @@ pub enum ToolPanelAction {
     ZoomIn,
     ZoomOut,
     FitToWindow,
+    ExportSvg,
+    ExportPng,
+    ExportPdf,
     None,
 }
 
@@ -113,15 +116,15 @@ impl ToolPanel {
             ui.label("Export:");
             
             if ui.button("📄 Export SVG").clicked() {
-                // TODO: Trigger SVG export
+                action = ToolPanelAction::ExportSvg;
             }
             
             if ui.button("🖼 Export PNG").clicked() {
-                // TODO: Trigger PNG export
+                action = ToolPanelAction::ExportPng;
             }
             
             if ui.button("📑 Export PDF").clicked() {
-                // TODO: Trigger PDF export
+                action = ToolPanelAction::ExportPdf;
             }
         });
         
