@@ -604,24 +604,21 @@ impl Default for MapView {
 
 impl MapView {
     fn handle_selection_input(&mut self, response: &Response, rect: Rect) {
-        if response.clicked() {
-            // Start new selection
+        if response.drag_started() {
+            // Start new selection on drag start
             if let Some(mouse_pos) = response.interact_pointer_pos() {
                 // Ensure mouse is within the map area
                 if rect.contains(mouse_pos) {
                     self.selection_rect = Some(SelectionRect {
                         start_pos: mouse_pos,
                         current_pos: mouse_pos,
-                        has_been_dragged: false,
+                        has_been_dragged: true, // Mark as dragged immediately
                     });
                 }
             }
         } else if response.dragged() {
-            // Update selection rectangle
+            // Update selection rectangle during drag
             if let (Some(ref mut selection), Some(mouse_pos)) = (&mut self.selection_rect, response.interact_pointer_pos()) {
-                // Mark that we've actually dragged
-                selection.has_been_dragged = true;
-                
                 // Clamp mouse position to map bounds
                 let clamped_pos = Pos2::new(
                     mouse_pos.x.clamp(rect.min.x, rect.max.x),
@@ -630,27 +627,15 @@ impl MapView {
                 selection.current_pos = clamped_pos;
             }
         } else if response.drag_stopped() {
-            // Complete selection and zoom to area - but only if we actually dragged
+            // Complete selection and zoom to area
             if let Some(selection) = self.selection_rect.take() {
-                if selection.has_been_dragged {
-                    self.zoom_to_selection(&selection, rect);
-                    self.selection_mode = false; // Exit selection mode after zoom
-                    println!("Rectangle zoom selection completed");
-                } else {
-                    // Single click without drag - do nothing
-                    println!("Single click detected, no zoom action");
-                }
+                self.zoom_to_selection(&selection, rect);
+                self.selection_mode = false; // Exit selection mode after zoom
+                println!("Rectangle zoom selection completed");
             }
         }
         
-        // Update current position while hovering (even without dragging)
-        if let (Some(ref mut selection), Some(mouse_pos)) = (&mut self.selection_rect, response.hover_pos()) {
-            if rect.contains(mouse_pos) {
-                selection.current_pos = mouse_pos;
-            }
-        }
-        
-        // Cancel selection on right click or escape
+        // Cancel selection on right click
         if response.secondary_clicked() {
             self.selection_rect = None;
             self.selection_mode = false;
@@ -761,12 +746,8 @@ impl MapView {
         // Show instruction text when in selection mode
         if self.selection_mode {
             let painter = ui.painter_at(rect);
-            let instruction_text = if let Some(selection) = &self.selection_rect {
-                if selection.has_been_dragged {
-                    "Drag to select area, release to zoom"
-                } else {
-                    "Drag to select area (single clicks do nothing)"
-                }
+            let instruction_text = if self.selection_rect.is_some() {
+                "Release to zoom to selected area"
             } else {
                 "Click and drag to select zoom area"
             };
