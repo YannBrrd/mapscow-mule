@@ -45,11 +45,17 @@ fn main() -> Result<()> {
 
     info!("Starting Mapscow Mule GUI");
     
+    let mut viewport_builder = egui::ViewportBuilder::default()
+        .with_inner_size([1200.0, 800.0])
+        .with_min_inner_size([800.0, 600.0]);
+    
+    // Add icon if available
+    if let Some(icon) = load_app_icon() {
+        viewport_builder = viewport_builder.with_icon(icon);
+    }
+    
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1200.0, 800.0])
-            .with_min_inner_size([800.0, 600.0])
-            .with_icon(load_app_icon()),
+        viewport: viewport_builder,
         ..Default::default()
     };
 
@@ -63,19 +69,28 @@ fn main() -> Result<()> {
 }
 
 /// Load the application icon from embedded PNG data
-fn load_app_icon() -> eframe::IconData {
+fn load_app_icon() -> Option<egui::IconData> {
+    // Check if the PNG file exists at compile time
+    if !std::path::Path::new("assets/icons/mapscow-mule.png").exists() {
+        println!("App icon not found. To add an icon:");
+        println!("1. Convert assets/icons/mapscow-mule.svg to PNG (512x512)");
+        println!("2. Save as assets/icons/mapscow-mule.png");
+        println!("3. Rebuild the application");
+        return None;
+    }
+    
     // Include the PNG file at compile time
     let icon_bytes = include_bytes!("../assets/icons/mapscow-mule.png");
     
-    // Try to load the icon, fall back to default if it fails
+    // Try to load the icon
     match eframe::icon_data::from_png_bytes(icon_bytes) {
         Ok(icon_data) => {
             info!("Successfully loaded application icon");
-            icon_data
+            Some(icon_data)
         }
         Err(e) => {
             eprintln!("Failed to load application icon: {}", e);
-            eframe::IconData::default()
+            None
         }
     }
 }
