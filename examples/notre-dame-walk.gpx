@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Example">
+  <trk>
+    <name>Promenade autour de Notre-Dame</name>
+    <trkseg>
+      <trkpt lat="48.8560" lon="2.3480">
+        <ele>35</ele>
+        <time>2024-01-15T10:00:00Z</time>
+      </trkpt>
+      <trkpt lat="48.8555" lon="2.3485">
+        <ele>35</ele>
+        <time>2024-01-15T10:01:00Z</time>
+      </trkpt>
+      <trkpt lat="48.8550" lon="2.3490">
+        <ele>35</ele>
+        <time>2024-01-15T10:02:00Z</time>
+      </trkpt>
+      <trkpt lat="48.8545" lon="2.3495">
+        <ele>35</ele>
+        <time>2024-01-15T10:03:00Z</time>
+      </trkpt>
+      <trkpt lat="48.8540" lon="2.3500">
+        <ele>35</ele>
+        <time>2024-01-15T10:04:00Z</time>
+      </trkpt>
+      <trkpt lat="48.8535" lon="2.3505">
+        <ele>35</ele>
+        <time>2024-01-15T10:05:00Z</time>
+      </trkpt>
+      <trkpt lat="48.8530" lon="2.3510">
+        <ele>35</ele>
+        <time>2024-01-15T10:06:00Z</time>
+      </trkpt>
+      <trkpt lat="48.8525" lon="2.3505">
+        <ele>35</ele>
+        <time>2024-01-15T10:07:00Z</time>
+      </trkpt>
+      <trkpt lat="48.8520" lon="2.3500">
+        <ele>35</ele>
+        <time>2024-01-15T10:08:00Z</time>
+      </trkpt>
+      <trkpt lat="48.8525" lon="2.3495">
+        <ele>35</ele>
+        <time>2024-01-15T10:09:00Z</time>
+      </trkpt>
+      <trkpt lat="48.8530" lon="2.3490">
+        <ele>35</ele>
+        <time>2024-01-15T10:10:00Z</time>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>
