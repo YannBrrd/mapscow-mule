@@ -25,6 +25,7 @@ pub struct MapConfig {
     pub background_color: (u8, u8, u8, u8),
     pub cache_enabled: bool,
     pub cache_size_mb: u32,
+    pub default_style: String,  // Added default style preference
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +52,7 @@ impl Default for AppConfig {
                 background_color: (240, 248, 255, 255),
                 cache_enabled: true,
                 cache_size_mb: 256,
+                default_style: "google-maps".to_string(),  // Default to Google Maps style
             },
             export: ExportConfig {
                 default_format: "svg".to_string(),

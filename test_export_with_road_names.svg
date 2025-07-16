@@ -1,0 +1,21 @@
+<svg height="800" shape-rendering="geometricPrecision" viewBox="0 0 1200 800" width="1200" xmlns="http://www.w3.org/2000/svg">
+<g id="map">
+<rect fill="#f8f6f0" height="800" stroke="none" width="1200" x="0" y="0"/>
+<g id="water">
+<path d="M468.401,250 L731.599,250 L731.599,550 L468.401,550 L468.401,250 z" fill="#aed6f1" opacity="0.8" stroke="#5dade2" stroke-width="0.5"/>
+</g>
+<g id="landuse"/>
+<g id="buildings">
+<path d="M534.201,300 L665.799,300 L665.799,500 L534.201,500 L534.201,300 z" fill="#e8e8e8" opacity="0.9" stroke="#999999" stroke-width="0.3"/>
+</g>
+<g id="roads">
+<path d="M501.301,200 L698.699,200 L698.699,600 L501.301,600 L501.301,200 z" fill="none" opacity="1" stroke="#f39c12" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"/>
+<text dominant-baseline="central" fill="#2c3e50" font-family="Arial, sans-serif" font-size="12" font-weight="bold" opacity="0.9" paint-order="stroke fill" stroke="#ffffff" stroke-linejoin="round" stroke-width="3" text-anchor="middle" x="698.699" y="600">
+Quai de l'Archevêché
+</text>
+</g>
+<g id="pois">
+<circle cx="593.42" cy="400" fill="#95a5a6" opacity="0.9" r="3" stroke="#ffffff" stroke-width="1"/>
+</g>
+</g>
+</svg>

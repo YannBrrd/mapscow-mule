@@ -1,4 +1,5 @@
 pub mod manager;
+pub mod loader;
 
 use crate::core::MapData;
 use crate::parsers::stylesheet::{StyleRule, FeatureSelector, ElementType as StyleElementType, RenderStyle};

@@ -1,0 +1,120 @@
+# OpenStreetMap Default Style Configuration
+# This file defines the colors and styling for standard OSM rendering
+
+[background]
+color = "#F2F0E9"  # Light beige background
+
+[water]
+color = "#B5D0D0"  # Light blue water
+opacity = 1.0
+
+[landuse]
+forest = "#ADD19E"           # Green forest
+residential = "#E0DFDF"      # Light gray residential
+commercial = "#EFC8C8"       # Light pink commercial
+industrial = "#DFD1DF"       # Light purple industrial
+cemetery = "#AACBAF"         # Light green cemetery
+retail = "#FFD6D1"
+
+[leisure]
+park = "#C8FACC"             # Light green park
+playground = "#CCFFF1"
+sport = "#8AD3AF"            # Sports areas
+recreation_ground = "#C8FACC"
+garden = "#C8FACC"
+
+[natural]
+wood = "#ADD19E"             # Green forest
+forest = "#ADD19E"
+grass = "#CDEBB0"
+grassland = "#CDEBB0"
+scrub = "#C8D7AB"
+
+[aeroway]
+default = "#D0D0D0"          # Gray aeroway
+
+[buildings]
+fill = "#F2EDE4"             # Light building color
+stroke = "#D6D1C6"
+stroke_width = 0.3
+
+[roads]
+# Format: [color, width, border_color, border_width]
+motorway = ["#E990A0", 5.0, "#DC2A67", 1.0]
+motorway_link = ["#E990A0", 3.0, "#DC2A67", 0.5]
+trunk = ["#F9B29C", 4.0, "#DC2A67", 1.0]
+trunk_link = ["#F9B29C", 3.0, "#DC2A67", 0.5]
+primary = ["#FCD6A4", 3.5, "#A06B00", 1.0]
+primary_link = ["#FCD6A4", 2.5, "#A06B00", 0.5]
+secondary = ["#F7FABF", 3.0, "#707D05", 0.8]
+secondary_link = ["#F7FABF", 2.0, "#707D05", 0.5]
+tertiary = ["#FFFFFF", 2.5, "#8F8F8F", 0.6]
+unclassified = ["#FFFFFF", 2.0, "#8F8F8F", 0.5]
+residential = ["#FFFFFF", 2.0, "#8F8F8F", 0.5]
+service = ["#FFFFFF", 1.0, "#8F8F8F", 0.3]
+living_street = ["#EDEDED", 2.0, "#8F8F8F", 0.5]
+pedestrian = ["#DDDDE8", 1.5, "#8F8F8F", 0.3]
+footway = ["#FA8072", 1.0, "", 0.0]
+path = ["#FA8072", 1.0, "", 0.0]
+cycleway = ["#0000FF", 1.0, "", 0.0]
+track = ["#996600", 1.0, "", 0.0]
+steps = ["#FA8072", 0.8, "", 0.0]
+
+[railway]
+rail_color = "#444444"
+rail_width = 1.5
+rail_dash_color = "white"
+rail_dash_width = 1.0
+rail_dash_pattern = "5,3"
+
+[boundaries]
+administrative_color = "#AC46AC"
+administrative_width = 2.0
+administrative_dash = "10,3"
+administrative_opacity = 0.8
+
+[pois]
+# Format: [color, radius]
+restaurant = ["#AC39AC", 3.0]
+cafe = ["#AC39AC", 3.0]
+fast_food = ["#AC39AC", 3.0]
+hospital = ["#DA0092", 4.0]
+school = ["#39AC39", 3.5]
+university = ["#39AC39", 4.0]
+bank = ["#AC39AC", 3.0]
+pharmacy = ["#DA0092", 3.0]
+fuel = ["#AC39AC", 3.5]
+police = ["#AC39AC", 3.0]
+fire_station = ["#AC39AC", 3.5]
+parking = ["#F2F2F2", 2.0]
+default = ["#666666", 2.0]
+
+[labels]
+# Font styling for labels
+font_family = "DejaVu Sans"
+road_label_stroke = "#FFFFFF"
+road_label_stroke_width = 2
+poi_label_stroke = "#FFFFFF"
+poi_label_stroke_width = 1
+place_label_stroke = "#FFFFFF"
+place_label_stroke_width = 2
+
+# Font sizes for different road types
+[road_label_fonts]
+motorway = 12
+trunk = 11
+primary = 10
+secondary = 9
+tertiary = 8
+residential = 7
+unclassified = 7
+service = 6
+
+# Font sizes for different place types
+[place_label_fonts]
+city = 16
+town = 14
+village = 12
+hamlet = 10
+suburb = 11
+default = 10

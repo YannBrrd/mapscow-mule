@@ -86,7 +86,8 @@ impl Exporter {
     ) -> Result<()> {
         match options.format {
             ExportFormat::Svg => {
-                svg_export::SvgExporter::new().export_with_data(
+                let exporter = svg_export::SvgExporter::new()?;
+                exporter.export_with_data(
                     map_data,
                     &options.output_path, 
                     options.width, 
@@ -121,7 +122,7 @@ impl Exporter {
         
         match options.format {
             ExportFormat::Svg => {
-                svg_export::SvgExporter::new().export(
+                svg_export::SvgExporter::new()?.export(
                     &rendered_map, 
                     &options.output_path, 
                     options.width, 

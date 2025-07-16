@@ -6,11 +6,44 @@
 Suivez les instructions dans [INSTALL.md](INSTALL.md) pour installer Rust et compiler l'application.
 
 ### 2. Premier lancement
+
+#### Lancement sans carte
 ```bash
 cargo run
 ```
 
+#### Lancement avec une carte OSM
+```bash
+cargo run -- --osm examples/notre-dame.osm
+```
+
 L'application démarre avec l'interface graphique principale.
+
+## Options de ligne de commande
+
+### Usage
+```bash
+mapscow-mule [OPTIONS]
+```
+
+### Options disponibles
+- `--osm <FILE>` : Charge un fichier OSM au démarrage
+- `--headless` : Mode sans interface graphique (non implémenté)
+- `-c, --config <FILE>` : Chemin vers le fichier de configuration
+- `-h, --help` : Affiche l'aide
+- `-V, --version` : Affiche la version
+
+### Exemples
+```bash
+# Lancer l'application sans carte
+mapscow-mule
+
+# Charger une carte OSM spécifique
+mapscow-mule --osm data/ma-carte.osm
+
+# Utiliser un fichier de configuration personnalisé
+mapscow-mule --config custom-config.toml --osm data/ma-carte.osm
+```
 
 ## Interface utilisateur
 

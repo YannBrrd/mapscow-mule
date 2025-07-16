@@ -1,6 +1,7 @@
 use crate::core::MapData;
+use crate::gui::{Tool, GuiState};
 use crate::rendering::MapRenderer;
-use crate::styles::StyleManager;
+use crate::styles::loader::StyleManager;
 use egui::{Ui, Response, Sense, Vec2, Pos2, Rect, Color32};
 
 /// Main map view widget
@@ -47,9 +48,22 @@ impl MapView {
         }
     }
     
-    pub fn show(&mut self, ui: &mut Ui, map_data: &Option<MapData>, renderer: &MapRenderer, style_manager: &StyleManager) -> Response {
+    pub fn show(&mut self, ui: &mut Ui, map_data: &Option<MapData>, renderer: &MapRenderer, style_manager: &StyleManager, gui_state: &GuiState) -> (Response, Option<Pos2>) {
         let available_size = ui.available_size();
-        let (rect, response) = ui.allocate_exact_size(available_size, Sense::click_and_drag().union(Sense::hover()));
+        let (rect, mut response) = ui.allocate_exact_size(available_size, Sense::click_and_drag().union(Sense::hover()));
+        
+        // Set cursor icon based on current tool
+        match gui_state.current_tool {
+            Tool::Pan => {
+                response = response.on_hover_cursor(egui::CursorIcon::Grab);
+            },
+            Tool::RectangleZoom if self.selection_mode => {
+                response = response.on_hover_cursor(egui::CursorIcon::Crosshair);
+            },
+            _ => {
+                // Default cursor for other tools
+            }
+        }
         
         // Update viewport size
         self.viewport.width = rect.width();
@@ -59,9 +73,13 @@ impl MapView {
         self.handle_input(ui, &response, rect);
         
         // Draw the map
-        self.draw_map(ui, rect, map_data, renderer, style_manager);
+        self.draw_map(ui, rect, map_data, renderer, style_manager, gui_state);
         
-        response
+        // Get hover position before moving response
+        let hover_pos = response.hover_pos();
+        
+        // Return response and hover position
+        (response, hover_pos)
     }
     
     /// Toggle rectangle selection mode on/off
@@ -90,6 +108,32 @@ impl MapView {
     /// Get viewport information for export (center coordinates and scale)
     pub fn get_viewport_info(&self) -> (f64, f64, f64) {
         (self.viewport.center_x, self.viewport.center_y, self.viewport.scale)
+    }
+    
+    /// Get detailed status information for the status bar
+    pub fn get_status_info(&self, hover_pos: Option<Pos2>, rect: Rect, map_data: &Option<crate::core::MapData>) -> String {
+        let mut status_parts = Vec::new();
+        
+        // Add zoom level and scale info
+        let scale_meters_per_pixel = 1.0 / self.viewport.scale * 111320.0; // Approximate meters per pixel
+        status_parts.push(format!("Zoom: {:.1}x", self.viewport.scale / 1000.0));
+        status_parts.push(format!("Scale: {:.0}m/px", scale_meters_per_pixel));
+        
+        // Add center coordinates
+        status_parts.push(format!("Center: {:.6}, {:.6}", self.viewport.center_x, self.viewport.center_y));
+        
+        // Add mouse coordinates if available
+        if let Some(mouse_pos) = hover_pos {
+            let (mouse_lon, mouse_lat) = self.screen_to_map(mouse_pos, rect);
+            status_parts.push(format!("Mouse: {:.6}, {:.6}", mouse_lon, mouse_lat));
+        }
+        
+        // Add map data statistics
+        if let Some(data) = map_data {
+            status_parts.push(format!("Features: {}/{}", data.ways.len(), data.nodes.len()));
+        }
+        
+        status_parts.join(" | ")
     }
 
     fn handle_input(&mut self, ui: &mut Ui, response: &Response, rect: Rect) {
@@ -153,57 +197,56 @@ impl MapView {
         }
     }
     
-    fn draw_map(&self, ui: &mut Ui, rect: Rect, map_data: &Option<MapData>, renderer: &MapRenderer, style_manager: &StyleManager) {
+    fn draw_map(&self, ui: &mut Ui, rect: Rect, map_data: &Option<MapData>, renderer: &MapRenderer, style_manager: &StyleManager, gui_state: &GuiState) {
         let painter = ui.painter_at(rect);
         
-        // Draw Google Maps-style background (light beige/gray)
-        painter.rect_filled(rect, 0.0, Color32::from_rgb(248, 246, 240));
+        // Draw background using the style from TOML config
+        let style = style_manager.get_current_style();
+        let bg_color = Self::hex_to_rgb(&style.background.color);
+        painter.rect_filled(rect, 0.0, Color32::from_rgb(bg_color.0, bg_color.1, bg_color.2));
         
         if let Some(data) = map_data {
             // Calculate visible bounds
             let visible_bounds = self.calculate_visible_bounds(rect);
             
-            // Draw map features in proper order (like Google Maps)
+            // Draw map features in proper order (like Google Maps) based on layer visibility
             // 1. Water bodies and areas (lowest layer)
-            self.draw_water_areas(ui, rect, data, &visible_bounds, style_manager);
+            if gui_state.show_water {
+                self.draw_water_areas(ui, rect, data, &visible_bounds, style_manager);
+            }
             
             // 2. Land use areas (parks, forests, etc.)
-            self.draw_landuse_areas(ui, rect, data, &visible_bounds, style_manager);
+            if gui_state.show_landuse {
+                self.draw_landuse_areas(ui, rect, data, &visible_bounds, style_manager);
+            }
             
             // 3. Buildings (with shadows for 3D effect)
-            self.draw_buildings(ui, rect, data, &visible_bounds, style_manager);
+            if gui_state.show_buildings {
+                self.draw_buildings(ui, rect, data, &visible_bounds, style_manager);
+            }
             
             // 4. Road casings (dark outlines first)
-            self.draw_road_casings(ui, rect, data, &visible_bounds, style_manager);
+            if gui_state.show_roads {
+                self.draw_road_casings(ui, rect, data, &visible_bounds, style_manager);
+            }
             
             // 5. Road fills (lighter colors on top)
-            self.draw_road_fills(ui, rect, data, &visible_bounds, style_manager);
+            if gui_state.show_roads {
+                self.draw_road_fills(ui, rect, data, &visible_bounds, style_manager);
+            }
             
             // 6. Railways and other transport
-            self.draw_railways(ui, rect, data, &visible_bounds, style_manager);
+            if gui_state.show_roads {
+                self.draw_railways(ui, rect, data, &visible_bounds, style_manager);
+            }
             
-            // 7. Points of interest
-            self.draw_points_of_interest(ui, rect, data, &visible_bounds, style_manager);
+            // 7. Points of Interest (POIs)
+            if gui_state.show_pois {
+                self.draw_pois(ui, rect, data, &visible_bounds, style_manager);
+            }
             
             // 8. Text labels (highest layer)
             self.draw_text_labels(ui, rect, data, &visible_bounds, style_manager);
-            
-            // Debug info (smaller and less intrusive)
-            if self.viewport.scale > 1000.0 { // Only show at high zoom
-                let debug_text = format!(
-                    "Zoom: {:.1}x | Features: {}/{}", 
-                    self.viewport.scale,
-                    data.ways.len(),
-                    data.nodes.len()
-                );
-                painter.text(
-                    rect.min + egui::Vec2::new(10.0, rect.height() - 25.0),
-                    egui::Align2::LEFT_BOTTOM,
-                    debug_text,
-                    egui::FontId::monospace(9.0),
-                    Color32::from_gray(120),
-                );
-            }
         } else {
             // Draw placeholder text
             let text = "No map data loaded";
@@ -219,9 +262,6 @@ impl MapView {
         
         // Draw selection rectangle if active
         self.draw_selection_rectangle(ui, rect);
-        
-        // Draw viewport info (cleaner style)
-        self.draw_viewport_info(ui, rect);
     }
     
     fn map_to_screen(&self, lon: f64, lat: f64, rect: Rect) -> Pos2 {
@@ -232,6 +272,16 @@ impl MapView {
             rect.min.x + x as f32,
             rect.min.y + y as f32,
         )
+    }
+    
+    fn screen_to_map(&self, screen_pos: Pos2, rect: Rect) -> (f64, f64) {
+        let rel_x = (screen_pos.x - rect.min.x) as f64 - (rect.width() / 2.0) as f64;
+        let rel_y = (screen_pos.y - rect.min.y) as f64 - (rect.height() / 2.0) as f64;
+        
+        let lon = self.viewport.center_x + rel_x / self.viewport.scale;
+        let lat = self.viewport.center_y - rel_y / self.viewport.scale; // Flip Y
+        
+        (lon, lat)
     }
     
     fn calculate_visible_bounds(&self, rect: Rect) -> VisibleBounds {
@@ -267,122 +317,150 @@ impl MapView {
     }
     
     fn get_way_style(&self, way: &crate::core::Way, style_manager: &StyleManager) -> ((u8, u8, u8), f32) {
-        // Try to get style from style manager first
-        if let Some(stylesheet) = style_manager.get_active_stylesheet() {
-            for rule in &stylesheet.rules {
-                if self.matches_way_selectors(way, &rule.selectors) {
-                    let mut color = (128, 128, 128); // default gray
-                    let mut width = 2.0;
-                    
-                    // Apply line color from rule
-                    if let Some(line_color) = &rule.style.line_color {
-                        color = (line_color.r, line_color.g, line_color.b);
-                    }
-                    
-                    // Apply line width from rule
-                    width = rule.style.line_width;
-                    
-                    return (color, width);
-                }
+        let style = style_manager.get_current_style();
+        
+        // Check for roads first
+        if let Some(highway) = way.tags.get("highway") {
+            let (color_str, width, _, _) = style.get_road_style(highway);
+            return (Self::hex_to_rgb(color_str), width);
+        }
+        
+        // Check for buildings
+        if way.tags.contains_key("building") {
+            return (Self::hex_to_rgb(&style.buildings.fill), style.buildings.stroke_width);
+        }
+        
+        // Check for waterways
+        if way.tags.contains_key("waterway") {
+            return (Self::hex_to_rgb(&style.water.color), 2.0);
+        }
+        
+        // Check for natural water features
+        if way.tags.get("natural") == Some(&"water".to_string()) {
+            return (Self::hex_to_rgb(&style.water.color), 1.0);
+        }
+        
+        // Check for landuse
+        if let Some(landuse) = way.tags.get("landuse") {
+            if let Some(color) = style.get_landuse_color(landuse) {
+                return (Self::hex_to_rgb(color), 1.0);
             }
         }
         
-        // Fallback to hardcoded styles if no stylesheet rules match
-        if let Some(highway) = way.tags.get("highway") {
-            match highway.as_str() {
-                "motorway" => ((231, 114, 0), 6.0), // Use our stylesheet colors as fallback too
-                "trunk" => ((255, 156, 0), 5.0),
-                "primary" => ((255, 205, 0), 4.0),
-                "secondary" => ((255, 230, 100), 3.5),
-                "tertiary" => ((255, 245, 150), 3.0),
-                "residential" => ((255, 255, 255), 2.5),
-                "service" => ((240, 240, 240), 1.5),
-                "footway" => ((200, 200, 200), 1.0),
-                _ => ((200, 200, 200), 1.5),
+        // Check for leisure
+        if let Some(leisure) = way.tags.get("leisure") {
+            if let Some(color) = style.get_leisure_color(leisure) {
+                return (Self::hex_to_rgb(color), 1.0);
             }
-        } else if way.tags.contains_key("building") {
-            ((218, 218, 218), 0.5) // Use stylesheet colors
-        } else if way.tags.contains_key("waterway") {
-            ((170, 211, 223), 2.0)
-        } else if way.tags.get("natural") == Some(&"water".to_string()) {
-            ((170, 211, 223), 1.0)
-        } else {
-            // Make default ways more visible
-            ((100, 100, 100), 2.0)
         }
+        
+        // Check for natural features
+        if let Some(natural) = way.tags.get("natural") {
+            if let Some(color) = style.get_natural_color(natural) {
+                return (Self::hex_to_rgb(color), 1.0);
+            }
+        }
+        
+        // Default fallback
+        ((100, 100, 100), 1.0)
     }
     
     fn get_node_style(&self, node: &crate::core::Node, style_manager: &StyleManager) -> ((u8, u8, u8), f32) {
-        // Try to get style from style manager first
-        if let Some(stylesheet) = style_manager.get_active_stylesheet() {
-            for rule in &stylesheet.rules {
-                if self.matches_node_selectors(node, &rule.selectors) {
-                    let mut color = (200, 100, 100); // default red
-                    let mut size = 3.0;
-                    
-                    // Apply line color from rule (for point styling)
-                    if let Some(line_color) = &rule.style.line_color {
-                        color = (line_color.r, line_color.g, line_color.b);
-                    }
-                    
-                    // Use line_width as point size for consistency
-                    if rule.style.line_width > 0.0 {
-                        size = rule.style.line_width;
-                    }
-                    
-                    return (color, size);
-                }
-            }
+        let style = style_manager.get_current_style();
+        
+        // Check for amenities
+        if let Some(amenity) = node.tags.get("amenity") {
+            let (color_str, radius) = style.get_poi_style(amenity);
+            return (Self::hex_to_rgb(color_str), radius);
         }
         
-        // Fallback to hardcoded styles if no stylesheet rules match
-        if node.tags.contains_key("amenity") {
-            ((220, 20, 60), 4.0) // Red from stylesheet
-        } else if node.tags.contains_key("shop") {
-            ((30, 144, 255), 3.5) // Blue from stylesheet
-        } else if node.tags.contains_key("tourism") {
-            ((50, 205, 50), 3.5) // Green from stylesheet
-        } else {
-            // Make all nodes much smaller and less prominent - they should not dominate the map
-            ((128, 128, 128), 1.0) // Gray and small
+        // Check for shops
+        if let Some(shop) = node.tags.get("shop") {
+            let (color_str, radius) = style.get_poi_style(shop);
+            return (Self::hex_to_rgb(color_str), radius);
         }
+        
+        // Check for tourism
+        if let Some(tourism) = node.tags.get("tourism") {
+            let (color_str, radius) = style.get_poi_style(tourism);
+            return (Self::hex_to_rgb(color_str), radius);
+        }
+        
+        // Default small gray node
+        ((128, 128, 128), 1.0)
+    }
+    
+    /// Convert hex color string to RGB tuple
+    fn hex_to_rgb(hex: &str) -> (u8, u8, u8) {
+        let hex = hex.trim_start_matches('#');
+        if hex.len() == 6 {
+            if let (Ok(r), Ok(g), Ok(b)) = (
+                u8::from_str_radix(&hex[0..2], 16),
+                u8::from_str_radix(&hex[2..4], 16),
+                u8::from_str_radix(&hex[4..6], 16),
+            ) {
+                return (r, g, b);
+            }
+        }
+        // Fallback to gray if parsing fails
+        (128, 128, 128)
     }
     
     pub fn zoom_to_fit(&mut self, map_data: &Option<MapData>) {
         if let Some(data) = map_data {
-            if let Some(bounds) = self.calculate_data_bounds(data) {
-                // Calculate center
-                self.viewport.center_x = (bounds.min_lon + bounds.max_lon) / 2.0;
-                self.viewport.center_y = (bounds.min_lat + bounds.max_lat) / 2.0;
+            if let Some(data_bounds) = self.calculate_data_bounds(data) {
+                // Use median coordinates for centering (more accurate than bounds center)
+                let center_x = data_bounds.median_lon;
+                let center_y = data_bounds.median_lat;
+                
+                println!("zoom_to_fit: bounds - lat: {:.6} to {:.6}, lon: {:.6} to {:.6}", 
+                         data_bounds.bounds.min_lat, data_bounds.bounds.max_lat, data_bounds.bounds.min_lon, data_bounds.bounds.max_lon);
+                println!("zoom_to_fit: using median center - lat: {:.6}, lon: {:.6}", center_y, center_x);
+                
+                self.viewport.center_x = center_x;
+                self.viewport.center_y = center_y;
                 
                 // Calculate scale to fit data with some padding
-                let data_width = bounds.max_lon - bounds.min_lon;
-                let data_height = bounds.max_lat - bounds.min_lat;
+                let data_width = data_bounds.bounds.max_lon - data_bounds.bounds.min_lon;
+                let data_height = data_bounds.bounds.max_lat - data_bounds.bounds.min_lat;
+                
+                println!("zoom_to_fit: data dimensions - width: {:.6}, height: {:.6}", data_width, data_height);
                 
                 if data_width > 0.0 && data_height > 0.0 {
                     // For geographic coordinates, we need reasonable scaling
                     // Geographic degrees are small numbers, so we need to scale appropriately
                     let scale_x = (self.viewport.width as f64 * 0.8) / data_width;
                     let scale_y = (self.viewport.height as f64 * 0.8) / data_height;
-                    self.viewport.scale = scale_x.min(scale_y);
+                    let calculated_scale = scale_x.min(scale_y);
                     
-                    // Clamp the scale to allow for very detailed viewing
-                    // For local maps (few km), we want scales from hundreds to hundreds of thousands for building details
-                    self.viewport.scale = self.viewport.scale.clamp(50.0, 500000.0);
+                    // Enforce minimum zoom level of 12 (scale = 12000.0)
+                    const MIN_ZOOM_LEVEL: f64 = 12.0;
+                    const MIN_SCALE: f64 = MIN_ZOOM_LEVEL * 1000.0;
+                    
+                    println!("zoom_to_fit: calculated scale: {:.1}, min scale: {:.1}", calculated_scale, MIN_SCALE);
+                    
+                    // Clamp the scale to enforce minimum zoom level and allow for very detailed viewing
+                    // For local maps (few km), we want scales from zoom level 12 to hundreds of thousands for building details
+                    self.viewport.scale = calculated_scale.clamp(MIN_SCALE, 500000.0);
+                    
+                    println!("zoom_to_fit: final scale: {:.1}, zoom level: {:.1}", self.viewport.scale, self.viewport.scale / 1000.0);
                 } else {
-                    // For single points or very small areas, use a moderate zoom
-                    self.viewport.scale = 1000.0;
+                    // For single points or very small areas, use minimum zoom level 12
+                    const MIN_ZOOM_LEVEL: f64 = 12.0;
+                    self.viewport.scale = MIN_ZOOM_LEVEL * 1000.0;
+                    println!("zoom_to_fit: single point/small area, setting zoom level to {:.1}", MIN_ZOOM_LEVEL);
                 }
             }
         } else {
-            // No data, reset to default
-            self.viewport.scale = 10000.0;
+            // No data, reset to default with minimum zoom level 12
+            const MIN_ZOOM_LEVEL: f64 = 12.0;
+            self.viewport.scale = MIN_ZOOM_LEVEL * 1000.0;
             self.viewport.center_x = 0.0;
             self.viewport.center_y = 0.0;
         }
     }
     
-    fn calculate_data_bounds(&self, map_data: &MapData) -> Option<VisibleBounds> {
+    fn calculate_data_bounds(&self, map_data: &MapData) -> Option<DataBounds> {
         if map_data.nodes.is_empty() {
             return None;
         }
@@ -411,6 +489,9 @@ impl MapView {
         let median_lat = lats[lats.len() / 2];
         let median_lon = lons[lons.len() / 2];
         
+        println!("calculate_data_bounds: total nodes: {}, median lat: {:.6}, median lon: {:.6}", 
+                 lats.len(), median_lat, median_lon);
+        
         // Second pass: exclude extreme outliers based on distance from median
         let mut min_lon = f64::INFINITY;
         let mut max_lon = f64::NEG_INFINITY;
@@ -419,7 +500,25 @@ impl MapView {
         
         let mut outlier_count = 0;
         let mut total_nodes = 0;
-        let max_distance_from_median = 1.0; // 1 degree maximum distance from median
+        
+        // Calculate the interquartile range for adaptive outlier detection
+        let q1_lat = lats[lats.len() / 4];
+        let q3_lat = lats[3 * lats.len() / 4];
+        let q1_lon = lons[lons.len() / 4];
+        let q3_lon = lons[3 * lons.len() / 4];
+        
+        let iqr_lat = q3_lat - q1_lat;
+        let iqr_lon = q3_lon - q1_lon;
+        
+        // Use a more selective outlier threshold - 1.5 times the IQR beyond Q1/Q3 (standard statistical outlier detection)
+        // But add a reasonable maximum threshold to handle datasets with extreme spread
+        let lat_outlier_threshold = (1.5 * iqr_lat).min(1.0).max(0.01); // Max 1 degree, min 0.01 degree
+        let lon_outlier_threshold = (1.5 * iqr_lon).min(1.5).max(0.01); // Max 1.5 degrees, min 0.01 degree
+        
+        println!("calculate_data_bounds: IQR-based thresholds - lat: {:.6}, lon: {:.6}", 
+                 lat_outlier_threshold, lon_outlier_threshold);
+        println!("calculate_data_bounds: Q1-Q3 ranges - lat: {:.6} to {:.6}, lon: {:.6} to {:.6}", 
+                 q1_lat, q3_lat, q1_lon, q3_lon);
         
         for node in map_data.nodes.values() {
             total_nodes += 1;
@@ -430,12 +529,15 @@ impl MapView {
                 continue;
             }
             
-            // Calculate distance from median
-            let lat_distance = (node.lat - median_lat).abs();
-            let lon_distance = (node.lon - median_lon).abs();
+            // Calculate distance from quartiles for more robust outlier detection
+            let lat_distance_from_q1 = if node.lat < q1_lat { q1_lat - node.lat } else { 0.0 };
+            let lat_distance_from_q3 = if node.lat > q3_lat { node.lat - q3_lat } else { 0.0 };
+            let lon_distance_from_q1 = if node.lon < q1_lon { q1_lon - node.lon } else { 0.0 };
+            let lon_distance_from_q3 = if node.lon > q3_lon { node.lon - q3_lon } else { 0.0 };
             
-            // Exclude extreme outliers that are too far from the median
-            if lat_distance > max_distance_from_median || lon_distance > max_distance_from_median {
+            // Exclude extreme outliers based on IQR method
+            if lat_distance_from_q1 > lat_outlier_threshold || lat_distance_from_q3 > lat_outlier_threshold ||
+               lon_distance_from_q1 > lon_outlier_threshold || lon_distance_from_q3 > lon_outlier_threshold {
                 outlier_count += 1;
                 continue;
             }
@@ -452,8 +554,12 @@ impl MapView {
         
         // Check if we have valid bounds
         if min_lon == f64::INFINITY {
+            println!("calculate_data_bounds: No valid bounds found after outlier filtering");
             return None;
         }
+        
+        println!("calculate_data_bounds: raw bounds - lat: {:.6} to {:.6}, lon: {:.6} to {:.6}", 
+                 min_lat, max_lat, min_lon, max_lon);
         
         // Add small padding if bounds are too small
         if (max_lon - min_lon) < 0.001 {
@@ -465,11 +571,18 @@ impl MapView {
             max_lat += 0.0005;
         }
         
-        Some(VisibleBounds {
-            min_lon,
-            max_lon,
-            min_lat,
-            max_lat,
+        println!("calculate_data_bounds: final bounds - lat: {:.6} to {:.6}, lon: {:.6} to {:.6}", 
+                 min_lat, max_lat, min_lon, max_lon);
+        
+        Some(DataBounds {
+            bounds: VisibleBounds {
+                min_lon,
+                max_lon,
+                min_lat,
+                max_lat,
+            },
+            median_lat,
+            median_lon,
         })
     }
     
@@ -534,6 +647,13 @@ struct VisibleBounds {
     max_lon: f64,
     min_lat: f64,
     max_lat: f64,
+}
+
+#[derive(Debug, Clone)]
+struct DataBounds {
+    bounds: VisibleBounds,
+    median_lat: f64,
+    median_lon: f64,
 }
 
 impl Default for MapView {
@@ -844,9 +964,10 @@ impl MapView {
                     .collect();
                 
                 if points.len() > 2 {
-                    // Google Maps building style: light gray with subtle shadow effect
-                    let building_color = Color32::from_rgb(228, 228, 228);
-                    let building_stroke = Color32::from_rgb(200, 200, 200);
+                    // Use style from StyleManager
+                    let ((r, g, b), stroke_width) = self.get_way_style(way, style_manager);
+                    let building_color = Color32::from_rgb(r, g, b);
+                    let building_stroke = Color32::from_rgb(r.saturating_sub(28), g.saturating_sub(28), b.saturating_sub(28));
                     
                     // Draw shadow first (slightly offset)
                     if self.viewport.scale > 5000.0 { // Only at high zoom levels
@@ -864,7 +985,7 @@ impl MapView {
                     painter.add(egui::Shape::convex_polygon(
                         points,
                         building_color,
-                        egui::Stroke::new(0.5, building_stroke),
+                        egui::Stroke::new(stroke_width, building_stroke),
                     ));
                 }
             }
@@ -908,8 +1029,10 @@ impl MapView {
                 continue;
             }
             
-            if let Some(highway) = way.tags.get("highway") {
-                let (width, color) = self.get_road_fill_style(highway);
+            if let Some(_highway) = way.tags.get("highway") {
+                // Use style from StyleManager instead of hardcoded colors
+                let ((r, g, b), width) = self.get_way_style(way, style_manager);
+                let color = Color32::from_rgb(r, g, b);
                 
                 let points: Vec<Pos2> = way.nodes
                     .iter()
@@ -955,48 +1078,102 @@ impl MapView {
         }
     }
     
-    fn draw_points_of_interest(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
+    fn draw_pois(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
         let painter = ui.painter_at(rect);
         
-        // Only draw POIs at reasonable zoom levels
-        if self.viewport.scale < 1000.0 {
-            return;
-        }
-        
+        // Draw POIs from nodes with amenity, shop, or other POI tags
         for node in map_data.nodes.values() {
-            if !self.point_in_bounds(node.lon, node.lat, visible_bounds) {
+            // Check if node is within visible bounds
+            if !self.node_intersects_bounds(node, visible_bounds) {
                 continue;
             }
             
-            let screen_pos = self.map_to_screen(node.lon, node.lat, rect);
-            let (color, size, icon) = self.get_poi_style(node);
-            
-            if size > 0.0 {
-                // Draw POI marker with Google Maps-style appearance
-                painter.circle_filled(
-                    screen_pos,
-                    size + 1.0, // Slightly larger background
-                    Color32::WHITE, // White background
-                );
-                painter.circle_filled(
-                    screen_pos,
-                    size,
-                    color,
-                );
+            // Check if this node is a POI
+            if let Some(poi_type) = self.get_poi_type(node) {
+                let screen_pos = self.map_to_screen(node.lon, node.lat, rect);
                 
-                // Draw icon or letter if available
-                if let Some(icon_text) = icon {
-                    painter.text(
-                        screen_pos,
-                        egui::Align2::CENTER_CENTER,
-                        icon_text,
-                        egui::FontId::proportional(8.0),
-                        Color32::WHITE,
-                    );
+                // Get style for this POI type
+                let (color_str, radius) = style_manager.get_current_style().get_poi_style(&poi_type);
+                let color = Self::hex_to_rgb(color_str);
+                let poi_color = Color32::from_rgb(color.0, color.1, color.2);
+                
+                // Draw POI as a circle
+                painter.circle_filled(screen_pos, radius, poi_color);
+                
+                // Add a subtle border
+                painter.circle_stroke(screen_pos, radius, egui::Stroke::new(0.5, Color32::from_rgb(0, 0, 0)));
+                
+                // Optionally draw POI name if available and zoom level is high enough
+                if self.viewport.scale > 50.0 {
+                    if let Some(name) = node.tags.get("name") {
+                        let label_pos = Pos2::new(screen_pos.x, screen_pos.y - radius - 2.0);
+                        painter.text(
+                            label_pos,
+                            egui::Align2::CENTER_BOTTOM,
+                            name,
+                            egui::FontId::proportional(9.0),
+                            Color32::BLACK,
+                        );
+                    }
                 }
             }
         }
     }
+    
+    /// Determine if a node is a POI and return its type
+    fn get_poi_type(&self, node: &crate::core::Node) -> Option<String> {
+        // Check amenity tags first (restaurants, cafes, hospitals, etc.)
+        if let Some(amenity) = node.tags.get("amenity") {
+            return Some(amenity.clone());
+        }
+        
+        // Check shop tags
+        if let Some(shop) = node.tags.get("shop") {
+            return Some(format!("shop_{}", shop));
+        }
+        
+        // Check tourism tags
+        if let Some(tourism) = node.tags.get("tourism") {
+            return Some(format!("tourism_{}", tourism));
+        }
+        
+        // Check leisure tags
+        if let Some(leisure) = node.tags.get("leisure") {
+            return Some(format!("leisure_{}", leisure));
+        }
+        
+        // Check office tags
+        if let Some(office) = node.tags.get("office") {
+            return Some(format!("office_{}", office));
+        }
+        
+        // Check healthcare tags
+        if let Some(healthcare) = node.tags.get("healthcare") {
+            return Some(format!("healthcare_{}", healthcare));
+        }
+        
+        // Check public transport
+        if node.tags.contains_key("public_transport") {
+            return Some("public_transport".to_string());
+        }
+        
+        // Check if it's a place (city, town, village, etc.)
+        if let Some(place) = node.tags.get("place") {
+            return Some(format!("place_{}", place));
+        }
+        
+        None
+    }
+    
+    /// Check if a node intersects with visible bounds
+    fn node_intersects_bounds(&self, node: &crate::core::Node, visible_bounds: &VisibleBounds) -> bool {
+        node.lat >= visible_bounds.min_lat 
+            && node.lat <= visible_bounds.max_lat
+            && node.lon >= visible_bounds.min_lon 
+            && node.lon <= visible_bounds.max_lon
+    }
+    
+    // Points of interest drawing has been disabled - no individual nodes will be drawn
     
     fn draw_text_labels(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
         let painter = ui.painter_at(rect);
@@ -1033,28 +1210,8 @@ impl MapView {
             }
         }
         
-        // Draw node labels (POI names)
-        if self.viewport.scale > 5000.0 {
-            for node in map_data.nodes.values() {
-                if !self.point_in_bounds(node.lon, node.lat, visible_bounds) {
-                    continue;
-                }
-                
-                if let Some(name) = node.tags.get("name") {
-                    if node.tags.contains_key("amenity") || node.tags.contains_key("shop") || node.tags.contains_key("tourism") {
-                        let screen_pos = self.map_to_screen(node.lon, node.lat, rect);
-                        
-                        painter.text(
-                            screen_pos + Vec2::new(8.0, 0.0), // Offset to the right of POI marker
-                            egui::Align2::LEFT_CENTER,
-                            name,
-                            egui::FontId::proportional(9.0),
-                            Color32::from_rgb(60, 60, 60),
-                        );
-                    }
-                }
-            }
-        }
+        // Draw node labels (POI names) - DISABLED
+        // No longer drawing individual OSM nodes or their labels
     }
     
     // Google Maps-style helper methods for styling
@@ -1087,30 +1244,6 @@ impl MapView {
         }
     }
     
-    fn get_poi_style(&self, node: &crate::core::Node) -> (Color32, f32, Option<String>) {
-        if let Some(amenity) = node.tags.get("amenity") {
-            match amenity.as_str() {
-                "restaurant" | "cafe" | "fast_food" => (Color32::from_rgb(220, 80, 40), 4.0, Some("🍽".to_string())),
-                "hospital" => (Color32::from_rgb(220, 20, 60), 5.0, Some("H".to_string())),
-                "school" => (Color32::from_rgb(100, 150, 255), 4.0, Some("🎓".to_string())),
-                "bank" => (Color32::from_rgb(50, 150, 50), 4.0, Some("$".to_string())),
-                "fuel" => (Color32::from_rgb(255, 150, 0), 4.0, Some("⛽".to_string())),
-                _ => (Color32::from_rgb(150, 150, 150), 3.0, None),
-            }
-        } else if let Some(shop) = node.tags.get("shop") {
-            (Color32::from_rgb(100, 150, 255), 3.5, Some("🛍".to_string()))
-        } else if let Some(tourism) = node.tags.get("tourism") {
-            match tourism.as_str() {
-                "hotel" => (Color32::from_rgb(150, 100, 200), 4.0, Some("🏨".to_string())),
-                "museum" => (Color32::from_rgb(200, 150, 100), 4.0, Some("🏛".to_string())),
-                "attraction" => (Color32::from_rgb(255, 100, 150), 4.0, Some("★".to_string())),
-                _ => (Color32::from_rgb(200, 100, 150), 3.5, None),
-            }
-        } else {
-            (Color32::TRANSPARENT, 0.0, None) // Don't draw regular nodes
-        }
-    }
-    
     fn get_label_style(&self, way: &crate::core::Way) -> (f32, Color32) {
         if let Some(highway) = way.tags.get("highway") {
             match highway.as_str() {
@@ -1124,40 +1257,5 @@ impl MapView {
         } else {
             (8.0, Color32::from_rgb(80, 80, 80))
         }
-    }
-    
-    fn draw_viewport_info(&self, ui: &mut Ui, rect: Rect) {
-        let painter = ui.painter_at(rect);
-        
-        // Draw scale info in bottom-right corner (Google Maps style)
-        let scale_text = format!("{:.0}m/px", 1.0 / self.viewport.scale * 111320.0); // Approximate meters per pixel
-        
-        let text_pos = rect.max - Vec2::new(15.0, 15.0);
-        
-        // Draw semi-transparent background
-        let text_size = painter.layout_no_wrap(
-            scale_text.clone(),
-            egui::FontId::monospace(9.0),
-            Color32::WHITE,
-        ).rect.size();
-        
-        let bg_rect = Rect::from_min_size(
-            text_pos - Vec2::new(text_size.x + 6.0, text_size.y + 4.0),
-            text_size + Vec2::new(8.0, 6.0),
-        );
-        
-        painter.rect_filled(
-            bg_rect,
-            3.0,
-            Color32::from_rgba_unmultiplied(0, 0, 0, 160),
-        );
-        
-        painter.text(
-            text_pos - Vec2::new(text_size.x + 2.0, text_size.y + 1.0),
-            egui::Align2::LEFT_TOP,
-            scale_text,
-            egui::FontId::monospace(9.0),
-            Color32::WHITE,
-        );
     }
 }

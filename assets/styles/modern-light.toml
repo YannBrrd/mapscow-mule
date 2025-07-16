@@ -1,0 +1,175 @@
+# Modern Light Style Configuration
+# A clean, minimalistic style with a light color palette.
+
+[background]
+color = "#f8f9fa"
+
+[water]
+color = "#d4e3f3"
+opacity = 1.0
+
+[landuse]
+forest = "#e6f0e6"
+residential = "#f1f3f5"
+commercial = "#f1f3f5"
+industrial = "#e9ecef"
+cemetery = "#e9ecef"
+retail = "#f1f3f5"
+
+[leisure]
+park = "#e6f0e6"
+playground = "#e6f0e6"
+sport = "#dce4dc"
+recreation_ground = "#e6f0e6"
+garden = "#e6f0e6"
+
+[natural]
+wood = "#e6f0e6"
+forest = "#e6f0e6"
+grass = "#e6f0e6"
+grassland = "#e6f0e6"
+scrub = "#e6f0e6"
+
+[aeroway]
+default = "#e9ecef"
+
+[buildings]
+fill = "#e9ecef"
+stroke = "#ced4da"
+stroke_width = 0.2
+
+[railway]
+rail_color = "#adb5bd"
+rail_width = 1.5
+rail_dash_color = "white"
+rail_dash_width = 0.7
+rail_dash_pattern = "6,6"
+
+[boundaries]
+administrative_color = "#adb5bd"
+administrative_width = 1.0
+administrative_dash = "4,2"
+administrative_opacity = 0.6
+
+[labels]
+font_family = "Noto Sans" # Clean sans-serif font
+road_label_color = "#343a40"
+road_label_stroke = "rgba(255, 255, 255, 0.7)"
+road_label_stroke_width = 2.0
+poi_label_color = "#343a40"
+poi_label_stroke = "rgba(255, 255, 255, 0.7)"
+poi_label_stroke_width = 1.5
+place_label_color = "#212529"
+place_label_stroke = "rgba(255, 255, 255, 0.7)"
+place_label_stroke_width = 2.0
+
+# Roads
+[roads.motorway]
+color = "#d4dce2"
+width = 6.0
+border_color = "#b8c2cc"
+border_width = 1.0
+
+[roads.motorway_link]
+color = "#d4dce2"
+width = 3.0
+border_color = "#b8c2cc"
+border_width = 0.5
+
+[roads.trunk]
+color = "#d4dce2"
+width = 5.0
+border_color = "#b8c2cc"
+border_width = 1.0
+
+[roads.trunk_link]
+color = "#d4dce2"
+width = 2.5
+border_color = "#b8c2cc"
+border_width = 0.5
+
+[roads.primary]
+color = "#e0e6eb"
+width = 4.0
+border_color = "#c8d0d8"
+border_width = 0.7
+
+[roads.primary_link]
+color = "#e0e6eb"
+width = 2.0
+border_color = "#c8d0d8"
+border_width = 0.5
+
+[roads.secondary]
+color = "#e0e6eb"
+width = 3.5
+border_color = "#c8d0d8"
+border_width = 0.5
+
+[roads.secondary_link]
+color = "#e0e6eb"
+width = 1.8
+border_color = "#c8d0d8"
+border_width = 0.3
+
+[roads.tertiary]
+color = "#e8edf1"
+width = 3.0
+border_color = "#d0d8e0"
+border_width = 0.5
+
+[roads.tertiary_link]
+color = "#e8edf1"
+width = 1.5
+border_color = "#d0d8e0"
+border_width = 0.3
+
+[roads.unclassified]
+color = "#ebeff3"
+width = 2.0
+
+[roads.residential]
+color = "#ebeff3"
+width = 2.0
+
+[roads.living_street]
+color = "#ebeff3"
+width = 1.5
+
+[roads.service]
+color = "#ebeff3"
+width = 1.2
+
+[roads.pedestrian]
+color = "#e8e8e8"
+width = 1.5
+dash_pattern = "3,3"
+
+[roads.track]
+color = "#e0e0e0"
+width = 1.0
+dash_pattern = "4,2"
+
+[roads.footway]
+color = "#d8d8d8"
+width = 0.8
+dash_pattern = "2,2"
+
+[roads.path]
+color = "#d8d8d8"
+width = 0.8
+dash_pattern = "2,2"
+
+[roads.cycleway]
+color = "#d0e0d0"
+width = 1.0
+dash_pattern = "4,4"
+
+[roads.steps]
+color = "#c8c8c8"
+width = 1.0
+dash_pattern = "1,1"
+
+[roads.default]
+color = "#f0f0f0"
+width = 1.0

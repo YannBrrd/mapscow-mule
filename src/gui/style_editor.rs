@@ -1,6 +1,6 @@
-use crate::styles::StyleManager;
+use crate::styles::loader::StyleManager;
 use crate::parsers::stylesheet::{StyleSheet, StyleRule, Color};
-use egui::{Ui, Color32, ScrollArea};
+use egui::{Ui, Color32, ScrollArea, Context};
 
 /// Style editor panel for customizing map appearance
 pub struct StyleEditor {
@@ -18,15 +18,112 @@ impl StyleEditor {
         }
     }
     
-    pub fn show(&mut self, ui: &mut Ui, style_manager: &mut StyleManager) {
+    /// Show the style editor as a modal window
+    pub fn show_modal(&mut self, ctx: &Context, is_open: &mut bool, style_manager: &mut StyleManager) {
+        egui::Window::new("Style Editor")
+            .open(is_open)
+            .default_width(600.0)
+            .default_height(500.0)
+            .resizable(true)
+            .collapsible(false)
+            .show(ctx, |ui| {
+                self.show_content(ui, style_manager);
+            });
+    }
+    
+    /// Show the style editor content (can be used in modal or panel)
+    pub fn show_content(&mut self, ui: &mut Ui, style_manager: &mut StyleManager) {
         ui.heading("Style Editor");
         ui.separator();
         
-        if let Some(stylesheet) = style_manager.get_active_stylesheet_mut() {
-            self.show_stylesheet_editor(ui, stylesheet);
-        } else {
-            ui.label("No active stylesheet");
-        }
+        // Current style information
+        ui.horizontal(|ui| {
+            ui.label("Available styles:");
+            let available_styles = style_manager.get_available_styles();
+            ui.label(format!("{}", available_styles.len()));
+        });
+        
+        ui.separator();
+        
+        // Style selector
+        ui.group(|ui| {
+            ui.label("Current Style Configuration:");
+            
+            let available_styles: Vec<String> = style_manager.get_available_styles().iter().map(|s| s.to_string()).collect();
+            
+            ui.horizontal(|ui| {
+                ui.label("Style:");
+                
+                let mut current_style = style_manager.get_available_styles()
+                    .first()
+                    .map(|s| s.to_string())
+                    .unwrap_or_default();
+                    
+                egui::ComboBox::from_id_salt("modal_style_selector")
+                    .selected_text(&current_style)
+                    .show_ui(ui, |ui| {
+                        for style_name in &available_styles {
+                            if ui.selectable_value(&mut current_style, style_name.clone(), style_name).clicked() {
+                                // Load the selected style
+                                if let Err(e) = style_manager.load_style(style_name) {
+                                    eprintln!("Error loading style {}: {}", style_name, e);
+                                }
+                            }
+                        }
+                    });
+            });
+        });
+        
+        ui.separator();
+        
+        // TOML editor section
+        ui.group(|ui| {
+            ui.label("TOML Style Editor:");
+            ui.separator();
+            
+            ScrollArea::vertical()
+                .max_height(300.0)
+                .show(ui, |ui| {
+                    // TODO: Implement actual TOML editor
+                    ui.label("📝 TOML-based style editor coming soon...");
+                    ui.label("This will allow direct editing of TOML style files.");
+                    ui.separator();
+                    ui.label("Planned features:");
+                    ui.label("• Direct TOML syntax editing");
+                    ui.label("• Real-time preview of changes");
+                    ui.label("• Syntax validation and error highlighting");
+                    ui.label("• Color pickers for color values");
+                    ui.label("• Save and load style files");
+                });
+        });
+        
+        ui.separator();
+        
+        // Action buttons
+        ui.horizontal(|ui| {
+            if ui.button("💾 Save Style").clicked() {
+                // TODO: Implement save functionality
+            }
+            
+            if ui.button("📁 Load Style File").clicked() {
+                // TODO: Implement load from file functionality
+            }
+            
+            if ui.button("🔄 Reload Current Style").clicked() {
+                // TODO: Implement reload functionality
+            }
+            
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("Close").clicked() {
+                    // The modal will be closed by the caller
+                }
+            });
+        });
+    }
+    
+    /// Legacy method for backward compatibility (now shows content only)
+    pub fn show(&mut self, ui: &mut Ui, style_manager: &mut StyleManager) {
+        self.show_content(ui, style_manager);
     }
     
     fn show_stylesheet_editor(&mut self, ui: &mut Ui, stylesheet: &mut StyleSheet) {

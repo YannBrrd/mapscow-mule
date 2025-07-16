@@ -37,13 +37,6 @@ impl ToolPanel {
             }
             
             if ui.selectable_label(
-                matches!(gui_state.current_tool, Tool::Zoom),
-                "🔍 Zoom"
-            ).clicked() {
-                gui_state.current_tool = Tool::Zoom;
-            }
-            
-            if ui.selectable_label(
                 matches!(gui_state.current_tool, Tool::RectangleZoom),
                 "🔲 Rectangle Zoom"
             ).clicked() {
@@ -126,17 +119,6 @@ impl ToolPanel {
             if ui.button("📑 Export PDF").clicked() {
                 action = ToolPanelAction::ExportPdf;
             }
-        });
-        
-        ui.separator();
-        
-        // Map information
-        ui.group(|ui| {
-            ui.label("Map Info:");
-            ui.label("📍 Features: 0");
-            ui.label("📊 Nodes: 0");
-            ui.label("🛣 Ways: 0");
-            ui.label("🔗 Relations: 0");
         });
         
         action

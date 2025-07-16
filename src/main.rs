@@ -34,6 +34,13 @@ fn main() -> Result<()> {
                 .value_name("FILE")
                 .help("Configuration file path"),
         )
+        .arg(
+            Arg::new("osm")
+                .long("osm")
+                .value_name("FILE")
+                .help("Load OSM file at startup")
+                .value_parser(clap::value_parser!(std::path::PathBuf)),
+        )
         .get_matches();
 
     if matches.get_flag("headless") {
@@ -44,6 +51,9 @@ fn main() -> Result<()> {
     }
 
     info!("Starting Mapscow Mule GUI");
+    
+    // Get optional OSM file from command line
+    let osm_file = matches.get_one::<std::path::PathBuf>("osm").cloned();
     
     let mut viewport_builder = egui::ViewportBuilder::default()
         .with_inner_size([1200.0, 800.0])
@@ -62,7 +72,7 @@ fn main() -> Result<()> {
     eframe::run_native(
         "Mapscow Mule - Map Renderer",
         options,
-        Box::new(|_cc| Ok(Box::new(MapscowMule::new()))),
+        Box::new(move |_cc| Ok(Box::new(MapscowMule::new(osm_file)))),
     ).map_err(|e| anyhow::anyhow!("Failed to run GUI: {}", e))?;
 
     Ok(())
