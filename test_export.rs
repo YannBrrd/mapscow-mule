@@ -8,7 +8,7 @@ use anyhow::Result;
 fn main() -> Result<()> {
     // Load the example OSM file
     let osm_path = "examples/notre-dame.osm";
-    println!("Loading OSM file: {}", osm_path);
+    debug!("Loading OSM file: {}", osm_path);
     
     let mut parser = OsmParser::new();
     let map_data = parser.parse_file(osm_path)?;

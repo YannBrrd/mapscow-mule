@@ -7,6 +7,7 @@ use crate::styles::loader::StyleManager;
 use crate::utils::file_dialog::{FileDialog, FileFilters};
 use anyhow::Result;
 use egui::{Context, CentralPanel, TopBottomPanel};
+use log::info;
 use std::path::PathBuf;
 
 pub struct MapscowMule {
@@ -72,12 +73,12 @@ impl MapscowMule {
         // Load OSM file if provided via command line
         if let Some(osm_path) = osm_file {
             if osm_path.exists() {
-                println!("Loading OSM file from command line: {:?}", osm_path);
+                info!("Loading OSM file from command line: {:?}", osm_path);
                 if let Err(e) = app.load_osm_file(&osm_path) {
                     println!("Failed to load OSM file: {}", e);
                 }
             } else {
-                println!("OSM file not found: {:?}", osm_path);
+                info!("OSM file not found: {:?}", osm_path);
             }
         }
         
@@ -375,7 +376,21 @@ impl eframe::App for MapscowMule {
         // Status bar
         TopBottomPanel::bottom("statusbar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label(&self.status_message);
+                // Show mode-specific instructions
+                match self.gui_state.current_tool {
+                    Tool::Select => {
+                        ui.colored_label(egui::Color32::LIGHT_BLUE, "🎯 Select Mode:");
+                        ui.label("Click on map elements to select and edit their style");
+                    }
+                    Tool::Pan => {
+                        ui.label(&self.status_message);
+                    }
+                    Tool::RectangleZoom => {
+                        ui.colored_label(egui::Color32::LIGHT_GREEN, "🔍 Zoom Mode:");
+                        ui.label("Drag to select area to zoom");
+                    }
+                }
+                
                 if !self.map_status.is_empty() {
                     ui.separator();
                     ui.label(&self.map_status);
@@ -402,6 +417,68 @@ impl eframe::App for MapscowMule {
             
             let (response, hover_pos) = self.map_view.show(ui, &self.map_data, &self.renderer, &self.style_manager, &self.gui_state);
             
+            // Handle element selection in Select mode
+            if self.gui_state.current_tool == Tool::Select {
+                // Get the selected element (clone it to avoid borrow issues)
+                let selected_element = self.map_view.get_selected_element().cloned();
+                
+                if let Some(selected_element) = selected_element {
+                    // Show selection info
+                    ui.vertical(|ui| {
+                        // First row: Element info
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 8.0;
+                            ui.colored_label(egui::Color32::LIGHT_BLUE, "🎯 Selected:");
+                            ui.label(format!("{} {}", 
+                                    match selected_element.element_type {
+                                        crate::gui::map_view::ElementType::Way => "Way",
+                                        crate::gui::map_view::ElementType::Node => "Node",
+                                        crate::gui::map_view::ElementType::Relation => "Relation",
+                                    },
+                                    selected_element.element_id));
+                            
+                            ui.separator();
+                            ui.label(format!("Type: {}", selected_element.style_info.category));
+                        });
+                        
+                        // Second row: TOML section info with copy button
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 8.0;
+                            ui.colored_label(egui::Color32::YELLOW, "📋 TOML Section:");
+                            
+                            // Display the TOML section name in a selectable label
+                            let toml_section = &selected_element.style_info.toml_section;
+                            ui.add(egui::Label::new(
+                                egui::RichText::new(format!("[{}]", toml_section))
+                                    .code()
+                                    .color(egui::Color32::WHITE)
+                            ).selectable(true));
+                            
+                            // Copy to clipboard button
+                            if ui.small_button("📋 Copy").clicked() {
+                                ui.output_mut(|o| o.copied_text = toml_section.clone());
+                            }
+                        });
+                        
+                        // Third row: Actions
+                        ui.horizontal(|ui| {
+                            if ui.button("🎨 Edit Style").clicked() {
+                                self.style_editor.jump_to_element_style(&selected_element);
+                                self.gui_state.show_style_editor_modal = true;
+                            }
+                            
+                            ui.separator();
+                            ui.label("Press 'C' to clear selection");
+                        });
+                    });
+                }
+                
+                // Handle clear selection with keyboard shortcut
+                if ui.input(|i| i.key_pressed(egui::Key::C)) {
+                    self.map_view.clear_selection();
+                }
+            }
+            
             // Update map status information
             self.map_status = self.map_view.get_status_info(hover_pos, response.rect, &self.map_data);
         });
@@ -410,7 +487,9 @@ impl eframe::App for MapscowMule {
         
         // Style Editor Modal
         if self.gui_state.show_style_editor_modal {
-            self.style_editor.show_modal(ctx, &mut self.gui_state.show_style_editor_modal, &mut self.style_manager);
+            let mut show_modal = self.gui_state.show_style_editor_modal;
+            self.style_editor.show_modal(ctx, &mut show_modal, &mut self.style_manager, &mut self.gui_state);
+            self.gui_state.show_style_editor_modal = show_modal;
         }
         
         // Layers Panel (floating window)

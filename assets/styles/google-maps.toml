@@ -2,52 +2,52 @@
 # This file defines the colors and styling for map export in Google Maps style
 
 [background]
-color = "#F8F7F7"  # Google Maps background color
+color = "#F2F1EC"  # More neutral cream background like Google Maps
 
 [water]
-color = "#A5BFDD"  # Google Maps water color
+color = "#AAD3DF"  # Softer blue-gray water color
 opacity = 1.0
 
 [landuse]
-forest = "#CBD8C3"           # Google Maps forest color
-residential = "#EBE6DC"      # Google Maps residential
-commercial = "#EBE6DC"       # Same as residential in Google Maps
-industrial = "#d1d0cd"       # Google Maps industrial
-cemetery = "#d1d0cd"         # Google Maps cemetery
-retail = "#EBE6DC"
+forest = "#C8D5B9"           # Muted forest green like Google Maps
+residential = "#F2F1EC"      # Match background for seamless look
+commercial = "#F2F1EC"       # Same as residential in Google Maps
+industrial = "#E8E7E2"       # Slightly darker than background
+cemetery = "#E8E7E2"         # Google Maps cemetery
+retail = "#F2F1EC"
 
 [leisure]
-park = "#b5d29c"             # Google Maps park color
-playground = "#b5d29c"
-sport = "#d5e1dc"            # Google Maps sport
-recreation_ground = "#b5d29c"
-garden = "#b5d29c"
+park = "#B8D2A0"             # More muted park green
+playground = "#B8D2A0"
+sport = "#C8D5B9"            # Slightly different green for sports
+recreation_ground = "#B8D2A0"
+garden = "#B8D2A0"
 
 [natural]
-wood = "#CBD8C3"             # Google Maps forest
-forest = "#CBD8C3"
-grass = "#b5d29c"
-grassland = "#b5d29c"
-scrub = "#CBD8C3"
+wood = "#C8D5B9"             # Consistent muted forest green
+forest = "#C8D5B9"
+grass = "#B8D2A0"
+grassland = "#B8D2A0"
+scrub = "#C8D5B9"
 
 [aeroway]
 default = "#d1d0cd"          # Google Maps aeroway color
 
 [buildings]
-fill = "#E8E9ED"             # Google Maps building color
-stroke = "#d0d0d0"
-stroke_width = 0.2
+fill = "#EAEAE8"             # Very light gray for buildings
+stroke = "#D8D8D6"           # Subtle outline
+stroke_width = 0.3
 
 [railway]
 rail_color = "#a1a1a1"
-rail_width = 2.0
+rail_width = 2
 rail_dash_color = "white"
-rail_dash_width = 1.0
+rail_dash_width = 1
 rail_dash_pattern = "8,4"
 
 [boundaries]
 administrative_color = "#818181"
-administrative_width = 1.5
+administrative_width = 2
 administrative_dash = "5,3"
 administrative_opacity = 0.7
 
@@ -63,254 +63,254 @@ place_label_stroke_width = 2
 
 # Road styling with nested tables for better structure
 [roads.motorway]
-color = "#B9C8D6"
-width = 4.0
-border_color = "#A5B4C2"
-border_width = 1.0
+color = "#FFFFFF"            # White roads like Google Maps
+width = 4
+border_color = "#B4C4D1"     # Soft blue-gray border
+border_width = 1
 
 [roads.motorway_link]
-color = "#B9C8D6"
-width = 2.5
-border_color = "#A5B4C2"
-border_width = 0.5
+color = "#FFFFFF"
+width = 3
+border_color = "#B4C4D1"
+border_width = 1
 
 [roads.trunk]
-color = "#B9C8D6"
-width = 3.5
-border_color = "#A5B4C2"
-border_width = 1.0
+color = "#FFFFFF"
+width = 4
+border_color = "#B4C4D1"
+border_width = 1
 
 [roads.trunk_link]
-color = "#B9C8D6"
-width = 2.0
-border_color = "#A5B4C2"
-border_width = 0.5
+color = "#FFFFFF"
+width = 2
+border_color = "#B4C4D1"
+border_width = 1
 
 [roads.primary]
-color = "#B9C8D6"
-width = 3.0
-border_color = "#A5B4C2"
-border_width = 1.0
+color = "#FFFFFF"
+width = 3
+border_color = "#B4C4D1"
+border_width = 1
 
 [roads.primary_link]
-color = "#B9C8D6"
-width = 2.0
-border_color = "#A5B4C2"
-border_width = 0.5
+color = "#FFFFFF"
+width = 2
+border_color = "#B4C4D1"
+border_width = 1
 
 [roads.secondary]
-color = "#B9C8D6"
-width = 2.5
-border_color = "#A5B4C2"
-border_width = 0.8
+color = "#FFFFFF"
+width = 3
+border_color = "#B4C4D1"
+border_width = 1
 
 [roads.secondary_link]
-color = "#B9C8D6"
-width = 1.8
-border_color = "#A5B4C2"
-border_width = 0.5
+color = "#FFFFFF"
+width = 2
+border_color = "#B4C4D1"
+border_width = 1
 
 [roads.tertiary]
-color = "#B9C8D6"
-width = 2.0
-border_color = "#A5B4C2"
-border_width = 0.6
+color = "#FFFFFF"
+width = 2
+border_color = "#B4C4D1"
+border_width = 1
 
 [roads.unclassified]
-color = "#B9C8D6"
-width = 1.8
-border_color = "#A5B4C2"
-border_width = 1.0
+color = "#FFFFFF"
+width = 2
+border_color = "#B4C4D1"
+border_width = 1
 
 [roads.residential]
-color = "#B9C8D6"
-width = 1.5
-border_color = "#A5B4C2"
-border_width = 1.0
+color = "#FFFFFF"
+width = 2
+border_color = "#B4C4D1"
+border_width = 1
 
 [roads.service]
-color = "#B9C8D6"
-width = 1.0
-border_color = "#A5B4C2"
-border_width = 0.5
+color = "#FFFFFF"
+width = 1
+border_color = "#B4C4D1"
+border_width = 1
 
 [roads.living_street]
-color = "#B9C8D6"
-width = 1.5
-border_color = "#A5B4C2"
-border_width = 0.8
+color = "#FFFFFF"
+width = 2
+border_color = "#B4C4D1"
+border_width = 1
 
 [roads.pedestrian]
-color = "#B9C8D6"
-width = 1.2
-border_color = "#A5B4C2"
-border_width = 0.5
+color = "#FFFFFF"
+width = 1
+border_color = "#B4C4D1"
+border_width = 1
 
 [roads.footway]
-color = "#B9C8D6"
-width = 1.0
-border_color = "#A5B4C2"
-border_width = 0.5
+color = "#FFFFFF"
+width = 1
+border_color = "#C4D0DA"
+border_width = 1
 
 [roads.path]
-color = "#B9C8D6"
-width = 1.0
-border_color = "#A5B4C2"
-border_width = 0.5
+color = "#FFFFFF"
+width = 1
+border_color = "#C4D0DA"
+border_width = 1
 
 [roads.cycleway]
-color = "#B9C8D6"
-width = 1.0
-border_color = "#A5B4C2"
-border_width = 0.5
+color = "#FFFFFF"
+width = 1
+border_color = "#B4C4D1"
+border_width = 1
 
 [roads.track]
-color = "#B9C8D6"
-width = 1.0
-border_color = "#A5B4C2"
-border_width = 0.3
+color = "#F8F8F6"            # Slightly off-white for tracks
+width = 1
+border_color = "#C4D0DA"
+border_width = 1
 
 [roads.steps]
-color = "#B9C8D6"
-width = 0.8
-border_color = "#A5B4C2"
-border_width = 0.3
+color = "#F8F8F6"
+width = 1
+border_color = "#C4D0DA"
+border_width = 1
 
 # POI styling with nested tables
 [pois.restaurant]
 color = "#e74c3c"
-radius = 4.0
+radius = 4
 
 [pois.cafe]
 color = "#e74c3c"
-radius = 4.0
+radius = 4
 
 [pois.fast_food]
 color = "#e74c3c"
-radius = 4.0
+radius = 4
 
 [pois.hospital]
 color = "#e5c6c3"
-radius = 5.0
+radius = 5
 
 [pois.school]
 color = "#3498db"
-radius = 4.5
+radius = 5
 
 [pois.university]
 color = "#3498db"
-radius = 4.5
+radius = 5
 
 [pois.bank]
 color = "#27ae60"
-radius = 4.0
+radius = 4
 
 [pois.pharmacy]
 color = "#8e44ad"
-radius = 3.5
+radius = 4
 
 [pois.fuel]
 color = "#f39c12"
-radius = 4.0
+radius = 4
 
 [pois.police]
 color = "#2c3e50"
-radius = 4.0
+radius = 4
 
 [pois.fire_station]
 color = "#e74c3c"
-radius = 4.5
+radius = 5
 
 [pois.parking]
 color = "#95a5a6"
-radius = 3.0
+radius = 3
 
 # Shop POIs
 [pois.shop_supermarket]
 color = "#2ecc71"
-radius = 4.0
+radius = 4
 
 [pois.shop_bakery]
 color = "#f39c12"
-radius = 3.5
+radius = 4
 
 [pois.shop_clothing]
 color = "#9b59b6"
-radius = 3.5
+radius = 4
 
 [pois.shop_convenience]
 color = "#2ecc71"
-radius = 3.0
+radius = 3
 
 # Tourism POIs
 [pois.tourism_hotel]
 color = "#3498db"
-radius = 4.0
+radius = 4
 
 [pois.tourism_attraction]
 color = "#e74c3c"
-radius = 4.5
+radius = 5
 
 [pois.tourism_museum]
 color = "#8e44ad"
-radius = 4.0
+radius = 4
 
 [pois.tourism_information]
 color = "#34495e"
-radius = 3.0
+radius = 3
 
 # Leisure POIs
 [pois.leisure_park]
 color = "#27ae60"
-radius = 5.0
+radius = 5
 
 [pois.leisure_playground]
 color = "#f1c40f"
-radius = 3.5
+radius = 4
 
 [pois.leisure_sports_centre]
 color = "#e67e22"
-radius = 4.0
+radius = 4
 
 # Office POIs
 [pois.office_government]
 color = "#34495e"
-radius = 4.0
+radius = 4
 
 [pois.office_company]
 color = "#7f8c8d"
-radius = 3.5
+radius = 4
 
 # Healthcare POIs
 [pois.healthcare_doctor]
 color = "#e74c3c"
-radius = 3.5
+radius = 4
 
 [pois.healthcare_dentist]
 color = "#e74c3c"
-radius = 3.5
+radius = 4
 
 # Transport POIs
 [pois.public_transport]
 color = "#3498db"
-radius = 3.0
+radius = 3
 
 # Place POIs (cities, towns, etc.)
 [pois.place_city]
 color = "#2c3e50"
-radius = 6.0
+radius = 6
 
 [pois.place_town]
 color = "#34495e"
-radius = 5.0
+radius = 5
 
 [pois.place_village]
 color = "#7f8c8d"
-radius = 4.0
+radius = 4
 
 [pois.default]
 color = "#95a5a6"
-radius = 2.5
+radius = 3
 
 # Font sizes for different road types
 [road_label_fonts]

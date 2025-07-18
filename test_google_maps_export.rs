@@ -6,16 +6,16 @@ use mapscow_mule::parsers::osm::OsmParser;
 use std::path::Path;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Testing Google Maps SVG export...");
+    debug!("Testing Google Maps SVG export...");
     
     // Load the Notre Dame OSM data
     let osm_file = "examples/notre-dame.osm";
-    println!("Loading OSM file: {}", osm_file);
+    debug!("Loading OSM file: {}", osm_file);
     
     let parser = OsmParser::new();
     let map_data = parser.parse_file(osm_file)?;
     
-    println!("Loaded {} nodes, {} ways", map_data.nodes.len(), map_data.ways.len());
+    debug!("Loaded {} nodes, {} ways", map_data.nodes.len(), map_data.ways.len());
     
     // Create SVG exporter with Google Maps styling
     let exporter = SvgExporter::new();
@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Export to SVG
     let output_file = "test_google_maps_output.svg";
-    println!("Exporting to: {}", output_file);
+    debug!("Exporting to: {}", output_file);
     
     exporter.export(
         &map_data,
@@ -42,8 +42,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         1000.0, // Scale
     )?;
     
-    println!("✓ Google Maps style SVG export completed successfully!");
-    println!("Check {} for the result with Google Maps styling and Inkscape layers", output_file);
+    debug!("✓ Google Maps style SVG export completed successfully!");
+    debug!("Check {} for the result with Google Maps styling and Inkscape layers", output_file);
     
     Ok(())
 }

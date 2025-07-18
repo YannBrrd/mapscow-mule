@@ -1,12 +1,36 @@
-use crate::styles::loader::StyleManager;
+use crate::styles::loader::{StyleManager, MapStyle};
 use crate::parsers::stylesheet::{StyleSheet, StyleRule, Color};
-use egui::{Ui, Color32, ScrollArea, Context};
+use crate::gui::map_view::SelectedElement;
+use egui::{Ui, Color32, ScrollArea, Context, TextEdit};
+use log::info;
+use std::collections::HashMap;
 
 /// Style editor panel for customizing map appearance
 pub struct StyleEditor {
     selected_rule: Option<usize>,
     color_picker_open: bool,
     current_color: Color32,
+    // TOML editor state
+    toml_content: String,
+    toml_error: Option<String>,
+    selected_tab: StyleEditorTab,
+    // For live preview
+    has_unsaved_changes: bool,
+    // Color editing
+    editing_colors: HashMap<String, Color32>,
+    // Element selection integration
+    jump_to_section: Option<String>,
+    search_highlight: Option<String>,
+    load_current_style_needed: bool,
+    last_searched_element: Option<String>, // Track the last element we searched for
+    selected_element_info: Option<SelectedElement>, // Store full selected element info
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum StyleEditorTab {
+    TomlEditor,
+    VisualEditor,
+    ColorPalette,
 }
 
 impl StyleEditor {
@@ -15,115 +39,182 @@ impl StyleEditor {
             selected_rule: None,
             color_picker_open: false,
             current_color: Color32::BLACK,
+            toml_content: String::new(),
+            toml_error: None,
+            selected_tab: StyleEditorTab::TomlEditor,
+            has_unsaved_changes: false,
+            editing_colors: HashMap::new(),
+            jump_to_section: None,
+            search_highlight: None,
+            load_current_style_needed: false,
+            last_searched_element: None,
+            selected_element_info: None,
+        }
+    }
+    
+    /// Jump to a specific TOML section based on selected map element
+    pub fn jump_to_element_style(&mut self, selected_element: &SelectedElement) {
+        self.selected_tab = StyleEditorTab::TomlEditor;
+        let toml_section = selected_element.style_info.toml_section.clone();
+        self.jump_to_section = Some(toml_section.clone());
+        self.search_highlight = Some(toml_section.clone());
+        self.last_searched_element = Some(format!("{} ({})", 
+            selected_element.style_info.category, 
+            selected_element.style_info.subcategory));
+        self.selected_element_info = Some(selected_element.clone());
+        
+        info!("Style editor jumping to section: {}", toml_section);
+        
+        // Force load the current style if not already loaded
+        if self.toml_content.is_empty() {
+            self.load_current_style_needed = true;
         }
     }
     
     /// Show the style editor as a modal window
-    pub fn show_modal(&mut self, ctx: &Context, is_open: &mut bool, style_manager: &mut StyleManager) {
-        egui::Window::new("Style Editor")
+    pub fn show_modal(&mut self, ctx: &Context, is_open: &mut bool, style_manager: &mut StyleManager, gui_state: &mut crate::gui::GuiState) {
+        egui::Window::new("🎨 Style Editor")
             .open(is_open)
-            .default_width(600.0)
-            .default_height(500.0)
+            .default_width(900.0)
+            .default_height(700.0)
+            .min_width(700.0)
+            .min_height(500.0)
             .resizable(true)
             .collapsible(false)
+            .vscroll(false)
             .show(ctx, |ui| {
-                self.show_content(ui, style_manager);
+                // Load current style content if needed
+                if self.toml_content.is_empty() || self.load_current_style_needed {
+                    self.load_current_style(style_manager);
+                    self.load_current_style_needed = false;
+                }
+                
+                self.show_content(ui, style_manager, gui_state);
             });
     }
     
     /// Show the style editor content (can be used in modal or panel)
-    pub fn show_content(&mut self, ui: &mut Ui, style_manager: &mut StyleManager) {
-        ui.heading("Style Editor");
-        ui.separator();
-        
-        // Current style information
+    pub fn show_content(&mut self, ui: &mut Ui, style_manager: &mut StyleManager, gui_state: &mut crate::gui::GuiState) {
         ui.horizontal(|ui| {
-            ui.label("Available styles:");
-            let available_styles = style_manager.get_available_styles();
-            ui.label(format!("{}", available_styles.len()));
-        });
-        
-        ui.separator();
-        
-        // Style selector
-        ui.group(|ui| {
-            ui.label("Current Style Configuration:");
-            
-            let available_styles: Vec<String> = style_manager.get_available_styles().iter().map(|s| s.to_string()).collect();
-            
-            ui.horizontal(|ui| {
-                ui.label("Style:");
-                
-                let mut current_style = style_manager.get_available_styles()
-                    .first()
-                    .map(|s| s.to_string())
-                    .unwrap_or_default();
-                    
-                egui::ComboBox::from_id_salt("modal_style_selector")
-                    .selected_text(&current_style)
-                    .show_ui(ui, |ui| {
-                        for style_name in &available_styles {
-                            if ui.selectable_value(&mut current_style, style_name.clone(), style_name).clicked() {
-                                // Load the selected style
-                                if let Err(e) = style_manager.load_style(style_name) {
-                                    eprintln!("Error loading style {}: {}", style_name, e);
-                                }
-                            }
-                        }
-                    });
+            ui.heading("🎨 Style Editor");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if self.has_unsaved_changes {
+                    ui.colored_label(egui::Color32::ORANGE, "● Unsaved changes");
+                }
             });
         });
-        
         ui.separator();
         
-        // TOML editor section
-        ui.group(|ui| {
-            ui.label("TOML Style Editor:");
-            ui.separator();
-            
-            ScrollArea::vertical()
-                .max_height(300.0)
-                .show(ui, |ui| {
-                    // TODO: Implement actual TOML editor
-                    ui.label("📝 TOML-based style editor coming soon...");
-                    ui.label("This will allow direct editing of TOML style files.");
+        // Show selected element info if available
+        let selected_element_clone = self.selected_element_info.clone();
+        if let Some(ref element) = selected_element_clone {
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.colored_label(egui::Color32::LIGHT_BLUE, "🎯 Selected Element:");
                     ui.separator();
-                    ui.label("Planned features:");
-                    ui.label("• Direct TOML syntax editing");
-                    ui.label("• Real-time preview of changes");
-                    ui.label("• Syntax validation and error highlighting");
-                    ui.label("• Color pickers for color values");
-                    ui.label("• Save and load style files");
+                    
+                    // Element type and ID
+                    ui.label(format!("{} #{}", 
+                        match element.element_type {
+                            crate::gui::map_view::ElementType::Way => "Way",
+                            crate::gui::map_view::ElementType::Node => "Node", 
+                            crate::gui::map_view::ElementType::Relation => "Relation",
+                        },
+                        element.element_id
+                    ));
+                    
+                    ui.separator();
+                    
+                    // Style category and subcategory
+                    ui.colored_label(egui::Color32::YELLOW, "Type:");
+                    ui.label(format!("{} → {}", element.style_info.category, element.style_info.subcategory));
+                    
+                    ui.separator();
+                    
+                    // TOML section
+                    ui.colored_label(egui::Color32::GREEN, "Section:");
+                    ui.add(egui::Label::new(
+                        egui::RichText::new(format!("[{}]", element.style_info.toml_section))
+                            .code()
+                            .color(egui::Color32::WHITE)
+                    ).selectable(true));
+                    
+                    // Clear button
+                    if ui.small_button("Clear").clicked() {
+                        self.selected_element_info = None;
+                        self.search_highlight = None;
+                        self.jump_to_section = None;
+                        self.last_searched_element = None;
+                    }
                 });
+                
+                // Show element tags if available (collapsible)
+                if !element.tags.is_empty() {
+                    ui.collapsing("🏷️ Element Tags", |ui| {
+                        egui::Grid::new("element_tags")
+                            .num_columns(2)
+                            .spacing([10.0, 4.0])
+                            .show(ui, |ui| {
+                                for (key, value) in &element.tags {
+                                    ui.monospace(key);
+                                    ui.monospace(value);
+                                    ui.end_row();
+                                }
+                            });
+                    });
+                }
+            });
+            ui.separator();
+        }
+        
+        // Tab selector
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut self.selected_tab, StyleEditorTab::TomlEditor, "📝 TOML Editor");
+            ui.selectable_value(&mut self.selected_tab, StyleEditorTab::ColorPalette, "🎨 Color Palette");
+            ui.selectable_value(&mut self.selected_tab, StyleEditorTab::VisualEditor, "🔧 Visual Editor");
         });
+        ui.separator();
+        
+        // Tab content
+        match self.selected_tab {
+            StyleEditorTab::TomlEditor => self.show_toml_editor(ui, style_manager, gui_state),
+            StyleEditorTab::ColorPalette => self.show_color_palette_editor(ui, style_manager),
+            StyleEditorTab::VisualEditor => self.show_visual_editor(ui, style_manager),
+        }
         
         ui.separator();
         
         // Action buttons
         ui.horizontal(|ui| {
             if ui.button("💾 Save Style").clicked() {
-                // TODO: Implement save functionality
+                self.save_style(style_manager);
             }
             
-            if ui.button("📁 Load Style File").clicked() {
-                // TODO: Implement load from file functionality
+            if ui.button("� Load Style File").clicked() {
+                self.load_style_file();
             }
             
-            if ui.button("🔄 Reload Current Style").clicked() {
-                // TODO: Implement reload functionality
+            if ui.button("� Reload").clicked() {
+                self.load_current_style(style_manager);
+            }
+            
+            if ui.button("� Export TOML").clicked() {
+                self.export_toml();
             }
             
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Close").clicked() {
-                    // The modal will be closed by the caller
+                    // Reset state when closing
+                    self.toml_content.clear();
+                    self.has_unsaved_changes = false;
                 }
             });
         });
     }
     
     /// Legacy method for backward compatibility (now shows content only)
-    pub fn show(&mut self, ui: &mut Ui, style_manager: &mut StyleManager) {
-        self.show_content(ui, style_manager);
+    pub fn show(&mut self, ui: &mut Ui, style_manager: &mut StyleManager, gui_state: &mut crate::gui::GuiState) {
+        self.show_content(ui, style_manager, gui_state);
     }
     
     fn show_stylesheet_editor(&mut self, ui: &mut Ui, stylesheet: &mut StyleSheet) {
@@ -409,6 +500,623 @@ impl StyleEditor {
                 }
             }
         }
+    }
+    
+    /// Load current style into TOML editor
+    fn load_current_style(&mut self, style_manager: &StyleManager) {
+        // Try to load the current style's TOML content
+        if let Some(current_style_name) = style_manager.get_available_styles().first() {
+            let style_path = format!("assets/styles/{}.toml", current_style_name);
+            match std::fs::read_to_string(&style_path) {
+                Ok(content) => {
+                    self.toml_content = content;
+                    self.toml_error = None;
+                    self.has_unsaved_changes = false;
+                }
+                Err(e) => {
+                    self.toml_error = Some(format!("Failed to load style file: {}", e));
+                    self.toml_content = self.generate_default_toml();
+                }
+            }
+        } else {
+            self.toml_content = self.generate_default_toml();
+        }
+    }
+    
+    /// Show TOML editor tab
+    fn show_toml_editor(&mut self, ui: &mut Ui, style_manager: &mut StyleManager, gui_state: &mut crate::gui::GuiState) {
+        // Auto-load current style if needed
+        if self.load_current_style_needed {
+            self.load_current_style(style_manager);
+            self.load_current_style_needed = false;
+        }
+        
+        ui.horizontal(|ui| {
+            ui.label("Current Style:");
+            let available_styles: Vec<String> = style_manager.get_available_styles().iter().map(|s| s.to_string()).collect();
+            
+            // Use the current style from gui_state, fallback to first available
+            if !available_styles.contains(&gui_state.selected_style) {
+                if let Some(first_style) = available_styles.first() {
+                    gui_state.selected_style = first_style.clone();
+                }
+            }
+            
+            let current_display_name = match gui_state.selected_style.as_str() {
+                "google-maps" => "Google Maps".to_string(),
+                "osm-default" => "OSM Default".to_string(),
+                name => name.replace('-', " ").replace('_', " ")
+                    .split_whitespace()
+                    .map(|word| {
+                        let mut chars = word.chars();
+                        match chars.next() {
+                            None => String::new(),
+                            Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                        }
+                    })
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            };
+            
+            egui::ComboBox::from_id_salt("toml_style_selector")
+                .selected_text(current_display_name)
+                .show_ui(ui, |ui| {
+                    for style_name in &available_styles {
+                        let display_name = match style_name.as_str() {
+                            "google-maps" => "Google Maps".to_string(),
+                            "osm-default" => "OSM Default".to_string(),
+                            name => name.replace('-', " ").replace('_', " ")
+                                .split_whitespace()
+                                .map(|word| {
+                                    let mut chars = word.chars();
+                                    match chars.next() {
+                                        None => String::new(),
+                                        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                                    }
+                                })
+                                .collect::<Vec<String>>()
+                                .join(" ")
+                        };
+                        
+                        if ui.selectable_value(&mut gui_state.selected_style, style_name.clone(), display_name).clicked() {
+                            if let Err(e) = style_manager.load_style(style_name) {
+                                self.toml_error = Some(format!("Error loading style: {}", e));
+                            } else {
+                                self.load_current_style(style_manager);
+                                // Clear any section highlighting when switching styles
+                                self.search_highlight = None;
+                                self.jump_to_section = None;
+                                self.last_searched_element = None;
+                                self.selected_element_info = None;
+                            }
+                        }
+                    }
+                });
+            
+            if ui.button("🔄 Validate").clicked() {
+                self.validate_toml();
+            }
+            
+        // Show section status banner
+        let search_section_clone = self.search_highlight.clone();
+        let element_info_clone = self.last_searched_element.clone();
+        
+        if let Some(ref section) = search_section_clone {
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.colored_label(egui::Color32::LIGHT_BLUE, "📍 Searching for:");
+                ui.add(egui::Label::new(
+                    egui::RichText::new(format!("[{}]", section))
+                        .code()
+                        .color(egui::Color32::WHITE)
+                ).selectable(true));
+                
+                if let Some(ref element_info) = element_info_clone {
+                    ui.separator();
+                    ui.colored_label(egui::Color32::YELLOW, "🎯 Element:");
+                    ui.label(element_info);
+                }
+                
+                if ui.button("Clear").clicked() {
+                    self.search_highlight = None;
+                    self.jump_to_section = None;
+                    self.last_searched_element = None;
+                    self.selected_element_info = None;
+                }
+            });
+        }
+        });
+        
+        // Show error if any
+        if let Some(ref error) = self.toml_error {
+            ui.colored_label(egui::Color32::RED, format!("❌ Error: {}", error));
+        }
+        
+        ui.separator();
+        
+        // Handle jumping to section
+        if let Some(ref section) = self.jump_to_section.take() {
+            if let Some(pos) = self.find_section_in_content(section) {
+                // Calculate the line number for better user experience
+                let line_num = self.toml_content[..pos].matches('\n').count() + 1;
+                info!("Found section '{}' at position {} (line {})", section, pos, line_num);
+                self.search_highlight = Some(section.clone());
+            } else {
+                // Add helpful content if section doesn't exist
+                self.highlight_section_in_content(section);
+                self.search_highlight = Some(section.clone());
+            }
+        }
+        
+        // TOML text editor with highlighting
+        let text_edit_response = ScrollArea::vertical()
+            .max_height(400.0)
+            .show(ui, |ui| {
+                // Add search functionality
+                ui.horizontal(|ui| {
+                    if let Some(ref highlight) = self.search_highlight {
+                        ui.label("🔍 Highlighting:");
+                        ui.monospace(highlight);
+                        
+                        // Show found section info
+                        if let Some(pos) = self.find_section_in_content(highlight) {
+                            let line_num = self.toml_content[..pos].matches('\n').count() + 1;
+                            ui.colored_label(egui::Color32::LIGHT_GREEN, format!("✓ Found at line {}", line_num));
+                        } else {
+                            ui.colored_label(egui::Color32::ORANGE, "⚠ Section not found");
+                            ui.label("→ You can add this section manually to customize styling");
+                        }
+                        
+                        if ui.button("Clear").clicked() {
+                            self.search_highlight = None;
+                        }
+                    }
+                });
+                
+                // Create a text editor with better highlighting
+                let mut text_edit = TextEdit::multiline(&mut self.toml_content)
+                    .code_editor()
+                    .desired_rows(20)
+                    .font(egui::TextStyle::Monospace);
+                
+                // Note: Can't set cursor position due to borrow checker limitations
+                // The highlighting info is shown above the editor instead
+                
+                ui.add_sized(
+                    [ui.available_width(), 400.0],
+                    text_edit
+                )
+            });
+        
+        if text_edit_response.inner.changed() {
+            self.has_unsaved_changes = true;
+            // Validate on change
+            self.validate_toml();
+        }
+        
+        // Quick navigation buttons for common sections
+        ui.separator();
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Quick jump:");
+            
+            let sections = vec![
+                ("🏠 Buildings", "buildings"),
+                ("🛣️ Roads", "roads"),
+                ("🌊 Water", "waterways"),
+                ("🏞️ Areas", "areas"),
+                ("🚂 Railways", "railways"),
+                ("📍 POIs", "pois"),
+                ("🎨 Background", "background"),
+            ];
+            
+            for (label, section) in sections {
+                if ui.small_button(label).clicked() {
+                    self.jump_to_section = Some(section.to_string());
+                    self.search_highlight = Some(section.to_string());
+                }
+            }
+        });
+        
+        // TOML help section
+        ui.separator();
+        ui.collapsing("📚 TOML Reference", |ui| {
+            ui.label("Common color formats:");
+            ui.monospace("color = \"#FF0000\"  # Red");
+            ui.monospace("color = \"#00FF00\"  # Green");
+            ui.monospace("color = \"#0000FF\"  # Blue");
+            ui.separator();
+            ui.label("Example road configuration:");
+            ui.monospace("[roads.primary]");
+            ui.monospace("color = \"#FFFFFF\"");
+            ui.monospace("width = 3");
+            ui.monospace("border_color = \"#B4C4D1\"");
+            ui.monospace("border_width = 1");
+        });
+    }
+    
+    /// Find a section in the TOML content and return its position
+    fn find_section_in_content(&self, section: &str) -> Option<usize> {
+        info!("Searching for section: '{}'", section);
+        
+        // Look for exact section headers first
+        let exact_patterns = vec![
+            format!("[{}]", section),
+            format!("[{}.", section), // For parent sections like [roads.
+        ];
+        
+        for pattern in &exact_patterns {
+            if let Some(pos) = self.toml_content.find(pattern) {
+                info!("Found exact section '{}' with pattern '{}' at position {}", section, pattern, pos);
+                return Some(pos);
+            }
+        }
+        
+        // Handle specific mappings based on our element categorization
+        let mapped_section = match section {
+            // Road sections
+            s if s.starts_with("roads.") => {
+                let road_type = s.strip_prefix("roads.").unwrap_or("");
+                format!("[roads.{}]", road_type)
+            }
+            // POI sections  
+            s if s.starts_with("pois.") => {
+                let poi_type = s.strip_prefix("pois.").unwrap_or("");
+                format!("[pois.{}]", poi_type)
+            }
+            // Top-level sections
+            "buildings" => "[buildings]".to_string(),
+            "landuse" => "[landuse]".to_string(),
+            "natural" => "[natural]".to_string(),
+            "water" => "[water]".to_string(),
+            "leisure" => "[leisure]".to_string(),
+            "railway" => "[railway]".to_string(),
+            "aeroway" => "[aeroway]".to_string(),
+            "boundaries" => "[boundaries]".to_string(),
+            _ => format!("[{}]", section),
+        };
+        
+        if let Some(pos) = self.toml_content.find(&mapped_section) {
+            info!("Found mapped section '{}' -> '{}' at position {}", section, mapped_section, pos);
+            return Some(pos);
+        }
+        
+        // Try alternative section names for backwards compatibility
+        let alt_sections = match section {
+            s if s.starts_with("highways.") || s.starts_with("roads.") => {
+                let road_type = s.split('.').last().unwrap_or("");
+                vec![
+                    format!("[roads.{}]", road_type),
+                    format!("[highway.{}]", road_type),
+                    format!("[highways.{}]", road_type),
+                ]
+            }
+            "buildings" => vec!["[building]".to_string()],
+            "waterways" | "water" => vec!["[water]".to_string(), "[waterway]".to_string()],
+            "railways" | "railway" => vec!["[railway]".to_string(), "[rail]".to_string()],
+            _ => vec![],
+        };
+        
+        for alt_section in alt_sections {
+            if let Some(pos) = self.toml_content.find(&alt_section) {
+                info!("Found alternative section '{}' for '{}' at position {}", alt_section, section, pos);
+                return Some(pos);
+            }
+        }
+        
+        // If still not found, try a simple substring search for the section name
+        let simple_name = section.split('.').last().unwrap_or(section);
+        if let Some(pos) = self.toml_content.find(&format!("[{}]", simple_name)) {
+            info!("Found simple section '{}' for '{}' at position {}", simple_name, section, pos);
+            return Some(pos);
+        }
+        
+        info!("Section '{}' not found in TOML content", section);
+        None
+    }
+    
+    /// Highlight a section in the content by adding a comment or finding existing section
+    fn highlight_section_in_content(&mut self, section: &str) {
+        if let Some(pos) = self.find_section_in_content(section) {
+            info!("Highlighting section '{}' found at position {}", section, pos);
+            // The section exists, no need to add anything
+        } else {
+            info!("Section '{}' not found, suggesting where to add it", section);
+            
+            // Add helpful comment suggesting where to add the section
+            let suggestion = match section {
+                s if s.starts_with("highways.") => {
+                    let highway_type = s.strip_prefix("highways.").unwrap_or("");
+                    format!("\n# Add highway styling for '{}' here:\n# [roads.{}]\n# color = \"#FFFFFF\"\n# width = 2\n# border_color = \"#CCCCCC\"\n# border_width = 1\n", highway_type, highway_type)
+                }
+                "buildings" => {
+                    "\n# Add building styling here:\n# [buildings]\n# color = \"#E0E0E0\"\n# border_color = \"#CCCCCC\"\n# border_width = 1\n".to_string()
+                }
+                _ => {
+                    format!("\n# Add styling for '{}' here:\n# [{}]\n# color = \"#FFFFFF\"\n", section, section)
+                }
+            };
+            
+            // Add the suggestion at the end if not already present
+            if !self.toml_content.contains(&format!("Add styling for '{}'", section)) &&
+               !self.toml_content.contains(&format!("Add highway styling for")) {
+                self.toml_content.push_str(&suggestion);
+                self.has_unsaved_changes = true;
+            }
+        }
+    }
+    
+    /// Show color palette editor tab
+    fn show_color_palette_editor(&mut self, ui: &mut Ui, _style_manager: &mut StyleManager) {
+        ui.label("🎨 Quick Color Editor");
+        ui.separator();
+        
+        // Parse current colors from TOML
+        let colors = self.extract_colors_from_toml();
+        
+        ScrollArea::vertical()
+            .max_height(400.0)
+            .show(ui, |ui| {
+                ui.columns(2, |columns| {
+                    // Left column - color categories
+                    columns[0].heading("Categories");
+                    
+                    if columns[0].button("🌊 Water Colors").clicked() {
+                        // Focus on water colors
+                    }
+                    if columns[0].button("🛣️ Road Colors").clicked() {
+                        // Focus on road colors  
+                    }
+                    if columns[0].button("🏢 Building Colors").clicked() {
+                        // Focus on building colors
+                    }
+                    if columns[0].button("🌳 Nature Colors").clicked() {
+                        // Focus on nature colors
+                    }
+                    if columns[0].button("📍 POI Colors").clicked() {
+                        // Focus on POI colors
+                    }
+                    
+                    // Right column - color editors
+                    columns[1].heading("Colors");
+                    
+                    for (category, category_colors) in colors {
+                        columns[1].collapsing(&category, |ui| {
+                            for (key, color_str) in category_colors {
+                                ui.horizontal(|ui| {
+                                    ui.label(&key);
+                                    
+                                    if let Ok(color) = self.parse_color(&color_str) {
+                                        let mut rgb = [
+                                            color.r() as f32 / 255.0,
+                                            color.g() as f32 / 255.0,
+                                            color.b() as f32 / 255.0,
+                                        ];
+                                        
+                                        if ui.color_edit_button_rgb(&mut rgb).changed() {
+                                            let new_color = Color32::from_rgb(
+                                                (rgb[0] * 255.0) as u8,
+                                                (rgb[1] * 255.0) as u8,
+                                                (rgb[2] * 255.0) as u8,
+                                            );
+                                            let hex_color = format!("#{:02X}{:02X}{:02X}", 
+                                                new_color.r(), new_color.g(), new_color.b());
+                                            self.update_color_in_toml(&key, &hex_color);
+                                            self.has_unsaved_changes = true;
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
+            });
+    }
+    
+    /// Show visual/GUI editor tab  
+    fn show_visual_editor(&mut self, ui: &mut Ui, _style_manager: &mut StyleManager) {
+        ui.label("🔧 Visual Style Editor");
+        ui.separator();
+        
+        // This is the existing stylesheet editor functionality
+        ui.label("Advanced visual editing coming soon...");
+        ui.separator();
+        ui.label("This will provide:");
+        ui.label("• Visual preview of style changes");
+        ui.label("• Drag-and-drop color editing");
+        ui.label("• Layer-based style management");
+        ui.label("• Real-time map preview");
+    }
+    
+    /// Validate the current TOML content
+    fn validate_toml(&mut self) {
+        match toml::from_str::<MapStyle>(&self.toml_content) {
+            Ok(_) => {
+                self.toml_error = None;
+            }
+            Err(e) => {
+                self.toml_error = Some(format!("TOML syntax error: {}", e));
+            }
+        }
+    }
+    
+    /// Save the current style
+    fn save_style(&mut self, style_manager: &mut StyleManager) {
+        // First validate
+        self.validate_toml();
+        
+        if self.toml_error.is_some() {
+            return;
+        }
+        
+        // Get current style name by collecting to owned strings
+        let available_styles: Vec<String> = style_manager.get_available_styles().iter().map(|s| s.to_string()).collect();
+        let current_style_name = available_styles.first().cloned();
+        
+        // Save to file
+        if let Some(style_name) = current_style_name {
+            let style_path = format!("assets/styles/{}.toml", style_name);
+            match std::fs::write(&style_path, &self.toml_content) {
+                Ok(_) => {
+                    self.has_unsaved_changes = false;
+                    // Reload the style in the manager
+                    if let Err(e) = style_manager.load_style(&style_name) {
+                        self.toml_error = Some(format!("Failed to reload style: {}", e));
+                    }
+                }
+                Err(e) => {
+                    self.toml_error = Some(format!("Failed to save file: {}", e));
+                }
+            }
+        }
+    }
+    
+    /// Load style from file
+    fn load_style_file(&mut self) {
+        // TODO: Implement file dialog
+        // For now, just reload current
+        self.toml_error = Some("File dialog not implemented yet".to_string());
+    }
+    
+    /// Export TOML to clipboard
+    fn export_toml(&mut self) {
+        // TODO: Copy to clipboard
+        self.toml_error = Some("Export to clipboard not implemented yet".to_string());
+    }
+    
+    /// Generate default TOML content
+    fn generate_default_toml(&self) -> String {
+        let mut content = String::new();
+        content.push_str("# Default Map Style Configuration\n\n");
+        content.push_str("[background]\n");
+        content.push_str("color = \"");
+        content.push_str("#F2F1EC");
+        content.push_str("\"\n\n");
+        content.push_str("[water]\n");
+        content.push_str("color = \"");
+        content.push_str("#AAD3DF");
+        content.push_str("\"\n");
+        content.push_str("opacity = 1.0\n\n");
+        content.push_str("[landuse]\n");
+        content.push_str("forest = \"");
+        content.push_str("#C8D5B9");
+        content.push_str("\"\n");
+        content.push_str("residential = \"");
+        content.push_str("#F2F1EC");
+        content.push_str("\"\n");
+        content.push_str("commercial = \"");
+        content.push_str("#F2F1EC");
+        content.push_str("\"\n");
+        content.push_str("industrial = \"");
+        content.push_str("#E8E7E2");
+        content.push_str("\"\n\n");
+        content.push_str("[leisure]\n");
+        content.push_str("park = \"");
+        content.push_str("#B8D2A0");
+        content.push_str("\"\n");
+        content.push_str("playground = \"");
+        content.push_str("#B8D2A0");
+        content.push_str("\"\n\n");
+        content.push_str("[buildings]\n");
+        content.push_str("fill = \"");
+        content.push_str("#EAEAE8");
+        content.push_str("\"\n");
+        content.push_str("stroke = \"");
+        content.push_str("#D8D8D6");
+        content.push_str("\"\n");
+        content.push_str("stroke_width = 0.3\n\n");
+        content.push_str("[roads.primary]\n");
+        content.push_str("color = \"");
+        content.push_str("#FFFFFF");
+        content.push_str("\"\n");
+        content.push_str("width = 3\n");
+        content.push_str("border_color = \"");
+        content.push_str("#B4C4D1");
+        content.push_str("\"\n");
+        content.push_str("border_width = 1\n\n");
+        content.push_str("[pois.default]\n");
+        content.push_str("color = \"");
+        content.push_str("#95a5a6");
+        content.push_str("\"\n");
+        content.push_str("radius = 3\n");
+        content
+    }
+    
+    /// Extract colors from TOML for color palette editor
+    fn extract_colors_from_toml(&self) -> HashMap<String, Vec<(String, String)>> {
+        let mut colors = HashMap::new();
+        
+        // Parse the TOML and extract color values
+        if let Ok(parsed) = toml::from_str::<toml::Value>(&self.toml_content) {
+            if let toml::Value::Table(table) = parsed {
+                for (section_name, section_value) in table {
+                    if let toml::Value::Table(section_table) = section_value {
+                        let mut section_colors = Vec::new();
+                        
+                        for (key, value) in section_table {
+                            match value {
+                                toml::Value::String(s) if s.starts_with('#') => {
+                                    section_colors.push((key, s));
+                                }
+                                toml::Value::Table(subtable) => {
+                                    for (subkey, subvalue) in subtable {
+                                        if let toml::Value::String(s) = subvalue {
+                                            if s.starts_with('#') {
+                                                section_colors.push((format!("{}.{}", key, subkey), s));
+                                            }
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        
+                        if !section_colors.is_empty() {
+                            colors.insert(section_name, section_colors);
+                        }
+                    }
+                }
+            }
+        }
+        
+        colors
+    }
+    
+    /// Parse a hex color string to Color32
+    fn parse_color(&self, color_str: &str) -> Result<Color32, ()> {
+        if !color_str.starts_with('#') || color_str.len() != 7 {
+            return Err(());
+        }
+        
+        let r = u8::from_str_radix(&color_str[1..3], 16).map_err(|_| ())?;
+        let g = u8::from_str_radix(&color_str[3..5], 16).map_err(|_| ())?;
+        let b = u8::from_str_radix(&color_str[5..7], 16).map_err(|_| ())?;
+        
+        Ok(Color32::from_rgb(r, g, b))
+    }
+    
+    /// Update a color value in the TOML content
+    fn update_color_in_toml(&mut self, key: &str, new_color: &str) {
+        // Simple string replacement for now
+        // TODO: Implement proper TOML parsing and modification
+        let search_pattern = format!("{} = ", key);
+        let lines: Vec<&str> = self.toml_content.lines().collect();
+        let mut new_lines = Vec::new();
+        
+        for line in lines {
+            if line.contains(&search_pattern) && line.contains('#') {
+                // Replace the color value
+                if let Some(equals_pos) = line.find('=') {
+                    let prefix = &line[..equals_pos + 1];
+                    new_lines.push(format!("{} \"{}\"", prefix, new_color));
+                } else {
+                    new_lines.push(line.to_string());
+                }
+            } else {
+                new_lines.push(line.to_string());
+            }
+        }
+        
+        self.toml_content = new_lines.join("\n");
     }
 }
 

@@ -4,6 +4,7 @@ use crate::rendering::MapRenderer;
 use crate::styles::loader::StyleManager;
 use egui::{Ui, Response, Sense, Vec2, Pos2, Rect, Color32};
 use log::{debug, info, warn};
+use std::collections::HashMap;
 
 /// Main map view widget
 pub struct MapView {
@@ -15,6 +16,30 @@ pub struct MapView {
     selection_rect: Option<SelectionRect>,
     /// Whether rectangle selection mode is active
     selection_mode: bool,
+    /// Selected map element (for style editing)
+    selected_element: Option<SelectedElement>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectedElement {
+    pub element_type: ElementType,
+    pub element_id: i64,
+    pub tags: HashMap<String, String>,
+    pub style_info: StyleInfo,
+}
+
+#[derive(Debug, Clone)]
+pub enum ElementType {
+    Way,
+    Node,
+    Relation,
+}
+
+#[derive(Debug, Clone)]
+pub struct StyleInfo {
+    pub category: String,  // e.g., "highway", "building", "natural", etc.
+    pub subcategory: String,  // e.g., "primary", "residential", "park", etc.
+    pub toml_section: String,  // Section name in TOML file
 }
 
 #[derive(Debug, Clone)]
@@ -46,7 +71,18 @@ impl MapView {
             },
             selection_rect: None,
             selection_mode: false,
+            selected_element: None,
         }
+    }
+    
+    /// Get the currently selected element
+    pub fn get_selected_element(&self) -> Option<&SelectedElement> {
+        self.selected_element.as_ref()
+    }
+    
+    /// Clear the current selection
+    pub fn clear_selection(&mut self) {
+        self.selected_element = None;
     }
     
     pub fn show(&mut self, ui: &mut Ui, map_data: &Option<MapData>, renderer: &MapRenderer, style_manager: &StyleManager, gui_state: &GuiState) -> (Response, Option<Pos2>) {
@@ -71,7 +107,7 @@ impl MapView {
         self.viewport.height = rect.height();
         
         // Handle input (pass the rect for coordinate conversion)
-        self.handle_input(ui, &response, rect);
+        self.handle_input(ui, &response, rect, map_data, gui_state);
         
         // Draw the map
         self.draw_map(ui, rect, map_data, renderer, style_manager, gui_state);
@@ -150,7 +186,7 @@ impl MapView {
         status_parts.join(" | ")
     }
 
-    fn handle_input(&mut self, ui: &mut Ui, response: &Response, rect: Rect) {
+    fn handle_input(&mut self, ui: &mut Ui, response: &Response, rect: Rect, map_data: &Option<MapData>, gui_state: &GuiState) {
         // Handle mouse wheel for zooming FIRST (should work in all modes)
         let scroll_delta = ui.input(|i| i.smooth_scroll_delta);
         if scroll_delta.y != 0.0 {
@@ -189,6 +225,14 @@ impl MapView {
         if self.selection_mode {
             self.handle_selection_input(response, rect);
             return; // Skip normal panning/zooming in selection mode
+        }
+        
+        // Handle element selection in Select mode
+        if gui_state.current_tool == Tool::Select && response.clicked() {
+            if let Some(click_pos) = response.interact_pointer_pos() {
+                self.handle_element_selection(click_pos, rect, map_data);
+            }
+            return; // Skip panning in select mode
         }
         
         // Handle mouse drag for panning
@@ -261,6 +305,9 @@ impl MapView {
             
             // 8. Text labels (highest layer)
             self.draw_text_labels(ui, rect, data, &visible_bounds, style_manager);
+            
+            // 9. Selection highlight (topmost layer)
+            self.draw_selection_highlight(ui, rect, data);
         } else {
             // Draw placeholder text
             let text = "No map data loaded";
@@ -871,6 +918,74 @@ impl MapView {
         }
     }
     
+    /// Draw a highlight around the selected element
+    fn draw_selection_highlight(&self, ui: &mut Ui, rect: Rect, map_data: &MapData) {
+        if let Some(selected) = &self.selected_element {
+            let painter = ui.painter_at(rect);
+            let highlight_color = Color32::from_rgb(255, 100, 0); // Orange highlight
+            let highlight_width = 3.0;
+            
+            match selected.element_type {
+                ElementType::Way => {
+                    if let Some(way) = map_data.ways.get(&selected.element_id) {
+                        self.draw_way_highlight(&painter, rect, way, map_data, highlight_color, highlight_width);
+                    }
+                }
+                ElementType::Node => {
+                    if let Some(node) = map_data.nodes.get(&selected.element_id) {
+                        self.draw_node_highlight(&painter, rect, node, highlight_color);
+                    }
+                }
+                ElementType::Relation => {
+                    // TODO: Implement relation highlighting if needed
+                }
+            }
+        }
+    }
+    
+    /// Draw highlight for a selected way
+    fn draw_way_highlight(&self, painter: &egui::Painter, rect: Rect, way: &crate::core::Way, map_data: &MapData, color: Color32, width: f32) {
+        if way.nodes.len() < 2 {
+            return;
+        }
+        
+        let mut screen_points = Vec::new();
+        
+        // Convert way nodes to screen coordinates
+        for &node_id in &way.nodes {
+            if let Some(node) = map_data.nodes.get(&node_id) {
+                let screen_pos = self.map_to_screen(node.lon, node.lat, rect);
+                screen_points.push(screen_pos);
+            }
+        }
+        
+        if screen_points.len() < 2 {
+            return;
+        }
+        
+        // Draw highlight lines
+        for i in 0..screen_points.len() - 1 {
+            painter.line_segment(
+                [screen_points[i], screen_points[i + 1]],
+                egui::Stroke::new(width, color),
+            );
+        }
+        
+        // If it's a closed way (polygon), close it
+        if screen_points.len() > 2 && way.nodes.first() == way.nodes.last() {
+            // Already closed by the loop above
+        }
+    }
+    
+    /// Draw highlight for a selected node
+    fn draw_node_highlight(&self, painter: &egui::Painter, rect: Rect, node: &crate::core::Node, color: Color32) {
+        let screen_pos = self.map_to_screen(node.lon, node.lat, rect);
+        let radius = 8.0;
+        
+        // Draw a circle highlight around the node
+        painter.circle_stroke(screen_pos, radius, egui::Stroke::new(3.0, color));
+    }
+
     // Google Maps-style specialized drawing methods
     
     fn draw_water_areas(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
@@ -1372,6 +1487,243 @@ impl MapView {
             (8.0, Color32::from_rgb(100, 100, 100))
         } else {
             (8.0, Color32::from_rgb(80, 80, 80))
+        }
+    }
+    
+    /// Handle element selection when clicking on the map in Select mode
+    fn handle_element_selection(&mut self, click_pos: Pos2, rect: Rect, map_data: &Option<MapData>) {
+        if let Some(data) = map_data {
+            let (click_lon, click_lat) = self.screen_to_map(click_pos, rect);
+            let tolerance = 10.0 / self.viewport.scale; // Click tolerance in map units
+            
+            debug!("Element selection at: {:.6}, {:.6} (tolerance: {:.6})", click_lon, click_lat, tolerance);
+            
+            // Find the closest element to the click position
+            let mut closest_element: Option<SelectedElement> = None;
+            let mut closest_distance = f64::INFINITY;
+            
+            // Check ways (roads, buildings, areas)
+            for way in data.ways.values() {
+                if let Some(distance) = self.calculate_way_distance(way, data, click_lon, click_lat) {
+                    if distance < tolerance && distance < closest_distance {
+                        closest_distance = distance;
+                        
+                        // Determine the style information
+                        let style_info = self.determine_style_info(&way.tags);
+                        
+                        closest_element = Some(SelectedElement {
+                            element_type: ElementType::Way,
+                            element_id: way.id,
+                            tags: way.tags.clone(),
+                            style_info,
+                        });
+                    }
+                }
+            }
+            
+            // Check nodes (POIs, etc.) if no way was found nearby
+            if closest_element.is_none() {
+                for node in data.nodes.values() {
+                    let node_distance = ((node.lon - click_lon).powi(2) + (node.lat - click_lat).powi(2)).sqrt();
+                    if node_distance < tolerance && node_distance < closest_distance {
+                        closest_distance = node_distance;
+                        
+                        // Only select nodes that have interesting tags (POIs, etc.)
+                        if self.is_selectable_node(node) {
+                            let style_info = self.determine_style_info(&node.tags);
+                            
+                            closest_element = Some(SelectedElement {
+                                element_type: ElementType::Node,
+                                element_id: node.id,
+                                tags: node.tags.clone(),
+                                style_info,
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // Update selection
+            if let Some(element) = closest_element {
+                info!("Selected {} {} with tags: {:?}", 
+                      match element.element_type {
+                          ElementType::Way => "way",
+                          ElementType::Node => "node", 
+                          ElementType::Relation => "relation",
+                      },
+                      element.element_id, 
+                      element.tags);
+                      
+                debug!("Style info: category={}, subcategory={}, toml_section={}", 
+                       element.style_info.category, 
+                       element.style_info.subcategory,
+                       element.style_info.toml_section);
+                       
+                self.selected_element = Some(element);
+            } else {
+                debug!("No selectable element found near click position");
+                self.selected_element = None;
+            }
+        }
+    }
+    
+    /// Calculate the distance from a point to a way (line or polygon)
+    fn calculate_way_distance(&self, way: &crate::core::Way, map_data: &MapData, lon: f64, lat: f64) -> Option<f64> {
+        if way.nodes.len() < 2 {
+            return None;
+        }
+        
+        let mut min_distance = f64::INFINITY;
+        
+        // Convert way nodes to coordinates
+        let coords: Vec<(f64, f64)> = way.nodes.iter()
+            .filter_map(|&node_id| {
+                map_data.nodes.get(&node_id).map(|node| (node.lon, node.lat))
+            })
+            .collect();
+            
+        if coords.len() < 2 {
+            return None;
+        }
+        
+        // Calculate distance to each line segment
+        for i in 0..coords.len() - 1 {
+            let (x1, y1) = coords[i];
+            let (x2, y2) = coords[i + 1];
+            let distance = self.point_to_line_distance(lon, lat, x1, y1, x2, y2);
+            min_distance = min_distance.min(distance);
+        }
+        
+        // If it's a closed way (polygon), also check the closing segment
+        if coords.len() > 2 && coords[0] == *coords.last().unwrap() {
+            // Already handled by the loop above since it's a closed way
+        }
+        
+        Some(min_distance)
+    }
+    
+    /// Calculate distance from a point to a line segment
+    fn point_to_line_distance(&self, px: f64, py: f64, x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
+        let line_length_sq = (x2 - x1).powi(2) + (y2 - y1).powi(2);
+        
+        if line_length_sq == 0.0 {
+            // Line segment is actually a point
+            return ((px - x1).powi(2) + (py - y1).powi(2)).sqrt();
+        }
+        
+        // Calculate the parameter t that represents the closest point on the line segment
+        let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / line_length_sq;
+        let t = t.clamp(0.0, 1.0); // Clamp to line segment
+        
+        // Find the closest point on the line segment
+        let closest_x = x1 + t * (x2 - x1);
+        let closest_y = y1 + t * (y2 - y1);
+        
+        // Return distance to closest point
+        ((px - closest_x).powi(2) + (py - closest_y).powi(2)).sqrt()
+    }
+    
+    /// Determine if a node is selectable (has interesting tags)
+    fn is_selectable_node(&self, node: &crate::core::Node) -> bool {
+        // Select nodes that have tags indicating they're POIs or features
+        node.tags.contains_key("amenity") ||
+        node.tags.contains_key("shop") ||
+        node.tags.contains_key("tourism") ||
+        node.tags.contains_key("leisure") ||
+        node.tags.contains_key("office") ||
+        node.tags.contains_key("craft") ||
+        node.tags.contains_key("emergency") ||
+        node.tags.contains_key("historic") ||
+        node.tags.contains_key("natural") ||
+        node.tags.contains_key("barrier") ||
+        (node.tags.contains_key("name") && node.tags.len() > 1)
+    }
+    
+    /// Determine style information for an element based on its tags
+    fn determine_style_info(&self, tags: &HashMap<String, String>) -> StyleInfo {
+        // Determine category and subcategory based on tags, matching actual TOML structure
+        if let Some(highway) = tags.get("highway") {
+            StyleInfo {
+                category: "road".to_string(),
+                subcategory: highway.clone(),
+                toml_section: format!("roads.{}", highway),
+            }
+        } else if tags.get("building").is_some() {
+            StyleInfo {
+                category: "building".to_string(),
+                subcategory: tags.get("building").unwrap_or(&"yes".to_string()).clone(),
+                toml_section: "buildings".to_string(),
+            }
+        } else if let Some(natural) = tags.get("natural") {
+            StyleInfo {
+                category: "natural".to_string(),
+                subcategory: natural.clone(),
+                toml_section: "natural".to_string(),
+            }
+        } else if let Some(landuse) = tags.get("landuse") {
+            StyleInfo {
+                category: "landuse".to_string(),
+                subcategory: landuse.clone(),
+                toml_section: "landuse".to_string(),
+            }
+        } else if let Some(leisure) = tags.get("leisure") {
+            StyleInfo {
+                category: "leisure".to_string(),
+                subcategory: leisure.clone(),
+                toml_section: "leisure".to_string(),
+            }
+        } else if tags.get("natural").map(|n| n == "water").unwrap_or(false) || tags.get("waterway").is_some() {
+            StyleInfo {
+                category: "water".to_string(),
+                subcategory: tags.get("waterway").unwrap_or(&"water".to_string()).clone(),
+                toml_section: "water".to_string(),
+            }
+        } else if let Some(amenity) = tags.get("amenity") {
+            // Map amenity to POI section
+            StyleInfo {
+                category: "poi".to_string(),
+                subcategory: amenity.clone(),
+                toml_section: format!("pois.{}", amenity),
+            }
+        } else if let Some(shop) = tags.get("shop") {
+            // Map shop to POI section
+            StyleInfo {
+                category: "poi".to_string(),
+                subcategory: format!("shop_{}", shop),
+                toml_section: format!("pois.shop_{}", shop),
+            }
+        } else if let Some(tourism) = tags.get("tourism") {
+            // Map tourism to POI section
+            StyleInfo {
+                category: "poi".to_string(),
+                subcategory: format!("tourism_{}", tourism),
+                toml_section: format!("pois.tourism_{}", tourism),
+            }
+        } else if let Some(railway) = tags.get("railway") {
+            StyleInfo {
+                category: "railway".to_string(),
+                subcategory: railway.clone(),
+                toml_section: "railway".to_string(),
+            }
+        } else if let Some(aeroway) = tags.get("aeroway") {
+            StyleInfo {
+                category: "aeroway".to_string(),
+                subcategory: aeroway.clone(),
+                toml_section: "aeroway".to_string(),
+            }
+        } else if tags.get("admin_level").is_some() {
+            StyleInfo {
+                category: "boundary".to_string(),
+                subcategory: "administrative".to_string(),
+                toml_section: "boundaries".to_string(),
+            }
+        } else {
+            // Generic element
+            StyleInfo {
+                category: "unknown".to_string(),
+                subcategory: "generic".to_string(),
+                toml_section: "unknown".to_string(),
+            }
         }
     }
 }

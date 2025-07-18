@@ -42,7 +42,7 @@ pub struct GuiState {
     pub is_geocoding: bool,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum Tool {
     Pan,
     Select,

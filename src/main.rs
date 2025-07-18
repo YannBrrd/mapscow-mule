@@ -10,7 +10,7 @@ mod utils;
 use anyhow::Result;
 use clap::{Arg, Command};
 use env_logger;
-use log::info;
+use log::{info, error, debug};
 
 use crate::app::MapscowMule;
 use crate::parsers::{osm::OsmParser, Parser};
@@ -58,7 +58,7 @@ fn main() -> Result<()> {
     if matches.get_flag("headless") {
         info!("Starting in headless mode");
         // TODO: Implement headless mode for batch processing
-        println!("Headless mode not implemented yet");
+        debug!("Headless mode not implemented yet");
         return Ok(());
     }
 
@@ -94,10 +94,10 @@ fn main() -> Result<()> {
 fn load_app_icon() -> Option<egui::IconData> {
     // Check if the PNG file exists at compile time
     if !std::path::Path::new("assets/icons/mapscow-mule.png").exists() {
-        println!("App icon not found. To add an icon:");
-        println!("1. Convert assets/icons/mapscow-mule.svg to PNG (512x512)");
-        println!("2. Save as assets/icons/mapscow-mule.png");
-        println!("3. Rebuild the application");
+        error!("App icon not found. To add an icon:");
+        error!("1. Convert assets/icons/mapscow-mule.svg to PNG (512x512)");
+        error!("2. Save as assets/icons/mapscow-mule.png");
+        error!("3. Rebuild the application");
         return None;
     }
     
@@ -111,25 +111,25 @@ fn load_app_icon() -> Option<egui::IconData> {
             Some(icon_data)
         }
         Err(e) => {
-            eprintln!("Failed to load application icon: {}", e);
+            error!("Failed to load application icon: {}", e);
             None
         }
     }
 }
 
 fn debug_bezons_search() -> Result<()> {
-    println!("Searching for roads near specific coordinates...");
+    debug!("Searching for roads near specific coordinates...");
     
     let osm_file = "C:\\Users\\yann\\Documents\\Maperitive\\sartrouville\\sartrouville.osm";
     if !Path::new(osm_file).exists() {
-        println!("Error: OSM file {} not found", osm_file);
+        error!("OSM file {} not found", osm_file);
         return Ok(());
     }
     
     let parser = OsmParser::new();
     let map_data = parser.parse_file(osm_file)?;
     
-    println!("Loaded {} nodes, {} ways", map_data.nodes.len(), map_data.ways.len());
+    debug!("Loaded {} nodes, {} ways", map_data.nodes.len(), map_data.ways.len());
     
     // Target coordinates
     let targets = vec![
@@ -138,7 +138,7 @@ fn debug_bezons_search() -> Result<()> {
     ];
     
     for (target_lat, target_lon, desc) in &targets {
-        println!("\n=== Roads near {} ({:.6}, {:.6}) ===", desc, target_lat, target_lon);
+        debug!("\n=== Roads near {} ({:.6}, {:.6}) ===", desc, target_lat, target_lon);
         
         let mut nearby_roads = Vec::new();
         
@@ -172,25 +172,25 @@ fn debug_bezons_search() -> Result<()> {
         // Sort by distance
         nearby_roads.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap());
         
-        println!("Found {} roads within 1km:", nearby_roads.len());
+        debug!("Found {} roads within 1km:", nearby_roads.len());
         for (i, (id, name, highway, distance, coord)) in nearby_roads.iter().take(15).enumerate() {
-            println!("  {}: Way {} '{}' ({})", i+1, id, name, highway);
-            println!("     Distance: {:.6} degrees (~{:.0}m)", distance, distance * 111000.0);
+            debug!("  {}: Way {} '{}' ({})", i+1, id, name, highway);
+            debug!("     Distance: {:.6} degrees (~{:.0}m)", distance, distance * 111000.0);
             if let Some((lat, lon)) = coord {
-                println!("     Closest point: {:.6}, {:.6}", lat, lon);
+                debug!("     Closest point: {:.6}, {:.6}", lat, lon);
             }
         }
         
         // Specifically look for streets with the name we're looking for
         let search_name = if desc.contains("Bezons") { "bezons" } else { "bernanos" };
-        println!("\nSpecific search for '{}':", search_name);
+        debug!("\nSpecific search for '{}':", search_name);
         
         for (id, name, highway, distance, coord) in &nearby_roads {
             if name.to_lowercase().contains(search_name) {
-                println!("  ✓ FOUND: Way {} '{}' ({})", id, name, highway);
-                println!("    Distance: {:.6} degrees (~{:.0}m)", distance, distance * 111000.0);
+                debug!("  ✓ FOUND: Way {} '{}' ({})", id, name, highway);
+                debug!("    Distance: {:.6} degrees (~{:.0}m)", distance, distance * 111000.0);
                 if let Some((lat, lon)) = coord {
-                    println!("    Closest point: {:.6}, {:.6}", lat, lon);
+                    debug!("    Closest point: {:.6}, {:.6}", lat, lon);
                 }
             }
         }
@@ -200,18 +200,18 @@ fn debug_bezons_search() -> Result<()> {
 }
 
 fn debug_bernanos_rendering() -> Result<()> {
-    println!("=== Debug: Rue Georges Bernanos Rendering ===");
+    debug!("=== Debug: Rue Georges Bernanos Rendering ===");
     
     let osm_file = "C:\\Users\\yann\\Documents\\Maperitive\\sartrouville\\sartrouville.osm";
     if !Path::new(osm_file).exists() {
-        println!("Error: OSM file {} not found", osm_file);
+        error!("OSM file {} not found", osm_file);
         return Ok(());
     }
     
     let parser = OsmParser::new();
     let map_data = parser.parse_file(osm_file)?;
     
-    println!("Loaded {} nodes, {} ways", map_data.nodes.len(), map_data.ways.len());
+    debug!("Loaded {} nodes, {} ways", map_data.nodes.len(), map_data.ways.len());
     
     // Find Rue Georges Bernanos specifically
     let mut bernanos_ways = Vec::new();
@@ -223,13 +223,13 @@ fn debug_bernanos_rendering() -> Result<()> {
         }
     }
     
-    println!("Found {} ways with 'bernanos' in name:", bernanos_ways.len());
+    debug!("Found {} ways with 'bernanos' in name:", bernanos_ways.len());
     
     // Also search for the specific way ID we know exists
-    println!("\n--- Searching for Way ID 188677600 (known Rue Georges Bernanos) ---");
+    debug!("\n--- Searching for Way ID 188677600 (known Rue Georges Bernanos) ---");
     if let Some(way) = map_data.ways.get(&188677600) {
-        println!("✓ Found Way 188677600!");
-        println!("  Name: {:?}", way.tags.get("name"));
+        debug!("✓ Found Way 188677600!");
+        debug!("  Name: {:?}", way.tags.get("name"));
         println!("  Highway: {:?}", way.tags.get("highway"));
         println!("  All tags: {:?}", way.tags);
     } else {
@@ -243,20 +243,20 @@ fn debug_bernanos_rendering() -> Result<()> {
         if let Some(name) = way.tags.get("name") {
             if name.to_lowercase().contains("georges") {
                 georges_ways += 1;
-                println!("Found way with 'georges': {}", name);
+                debug!("Found way with 'georges': {}", name);
             }
             if name.to_lowercase().contains("bernanos") {
                 bernanos_ways_count += 1;
-                println!("Found way with 'bernanos': {}", name);
+                debug!("Found way with 'bernanos': {}", name);
             }
         }
     }
-    println!("Total ways with 'georges': {}", georges_ways);
+    debug!("Total ways with 'georges': {}", georges_ways);
     println!("Total ways with 'bernanos': {}", bernanos_ways_count);
     
     for way in &bernanos_ways {
-        println!("\n--- Way {} ---", way.id);
-        println!("Name: {:?}", way.tags.get("name"));
+        debug!("\n--- Way {} ---", way.id);
+        debug!("Name: {:?}", way.tags.get("name"));
         println!("Highway: {:?}", way.tags.get("highway"));
         println!("All tags: {:?}", way.tags);
         println!("Node count: {}", way.nodes.len());
@@ -289,7 +289,7 @@ fn debug_bernanos_rendering() -> Result<()> {
             let dist_to_first = ((first.0 - target.0).powi(2) + (first.1 - target.1).powi(2)).sqrt();
             let dist_to_last = ((last.0 - target.0).powi(2) + (last.1 - target.1).powi(2)).sqrt();
             
-            println!("  Distance to target from first: {:.6} degrees (~{:.0}m)", 
+            debug!("  Distance to target from first: {:.6} degrees (~{:.0}m)", 
                      dist_to_first, dist_to_first * 111000.0);
             println!("  Distance to target from last: {:.6} degrees (~{:.0}m)", 
                      dist_to_last, dist_to_last * 111000.0);
@@ -298,7 +298,7 @@ fn debug_bernanos_rendering() -> Result<()> {
     
     // Check what's near the target coordinates
     let target = (48.94396813214317, 2.1806281043179876);
-    println!("\n=== Roads within 100m of target ({:.6}, {:.6}) ===", target.0, target.1);
+    debug!("\n=== Roads within 100m of target ({:.6}, {:.6}) ===", target.0, target.1);
     
     let mut nearby_roads = Vec::new();
     for way in map_data.ways.values() {
