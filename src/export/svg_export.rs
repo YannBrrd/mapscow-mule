@@ -1,5 +1,6 @@
 use svg::node::element::{Group, Rectangle, Text, Path, Circle, Element};
 use svg::node::element::path::Data;
+use svg::node::{Node, Text as TextNode};
 use svg::Document;
 use anyhow::Result;
 use crate::rendering::{RenderedMap, RenderElement, ElementStyle};
@@ -11,6 +12,7 @@ pub struct SvgExporter {
     pub precision: usize,
     pub anti_aliasing: bool,
     pub layer_separation: bool,
+    pub show_all_road_names: bool,  // New option to display all road names
     pub style_manager: StyleManager,
 }
 
@@ -20,6 +22,7 @@ impl SvgExporter {
             precision: 3,
             anti_aliasing: true,
             layer_separation: true,
+            show_all_road_names: false,  // Default to showing only major roads
             style_manager: StyleManager::new()?,
         })
     }
@@ -36,6 +39,11 @@ impl SvgExporter {
 
     pub fn with_layer_separation(mut self, enabled: bool) -> Self {
         self.layer_separation = enabled;
+        self
+    }
+
+    pub fn with_all_road_names(mut self, show_all: bool) -> Self {
+        self.show_all_road_names = show_all;
         self
     }
 
@@ -279,28 +287,24 @@ impl SvgExporter {
                         .set("stroke-linejoin", "round");
                     roads_group = roads_group.add(road_path);
 
-                    // Add road name labels for major roads (moved to labels group)
+                    // Add road name labels following road direction
                     if let Some(name) = way.tags.get("name") {
+                        println!("DEBUG: Found road with name '{}' and highway '{}'", name, highway);
                         if self.should_label_road(highway) && !name.trim().is_empty() {
-                            if let Some(label_position) = self.calculate_road_label_position(way, map_data, &to_svg_coords) {
-                                let font_size = style.get_road_label_font_size(highway);
-                                let road_label = Text::new(name)
-                                    .set("x", label_position.0)
-                                    .set("y", label_position.1)
-                                    .set("text-anchor", "middle")
-                                    .set("dominant-baseline", "central")
-                                    .set("font-family", style.labels.font_family.as_str())
-                                    .set("font-size", font_size)
-                                    .set("font-weight", "normal")
-                                    .set("fill", "#000000")
-                                    .set("stroke", style.labels.road_label_stroke.as_str())
-                                    .set("stroke-width", style.labels.road_label_stroke_width)
-                                    .set("stroke-linejoin", "round")
-                                    .set("paint-order", "stroke fill")
-                                    .set("opacity", 1.0);
-                                labels_group = labels_group.add(road_label);
+                            println!("DEBUG: Should label road: {}", name);
+                            let font_size = style.get_road_label_font_size(highway) as f64;
+                            println!("DEBUG: Font size: {}", font_size);
+                            let text_labels = self.create_curved_text_labels(way, map_data, &to_svg_coords, name, font_size);
+                            println!("DEBUG: Created {} text labels", text_labels.len());
+                            
+                            for label in text_labels {
+                                labels_group = labels_group.add(label);
                             }
+                        } else {
+                            println!("DEBUG: Road '{}' should not be labeled (highway: {})", name, highway);
                         }
+                    } else {
+                        println!("DEBUG: Road has no name, highway: {}", highway);
                     }
                 }
             }
@@ -417,15 +421,28 @@ impl SvgExporter {
     }
 
     fn should_label_road(&self, highway: &str) -> bool {
-        // Label more road types to ensure visibility
-        matches!(highway, 
-            "motorway" | "trunk" | "primary" | "secondary" | "tertiary" | 
-            "motorway_link" | "trunk_link" | "primary_link" | "secondary_link" |
-            "residential" | "unclassified" | "service" // Added more road types
-        )
+        println!("DEBUG: should_label_road called with highway='{}', show_all_road_names={}", highway, self.show_all_road_names);
+        let result = if self.show_all_road_names {
+            // Show all road types with names when option is enabled
+            matches!(highway, 
+                "motorway" | "trunk" | "primary" | "secondary" | "tertiary" | 
+                "motorway_link" | "trunk_link" | "primary_link" | "secondary_link" |
+                "residential" | "unclassified" | "service" | "living_street" |
+                "pedestrian" | "footway" | "path" | "cycleway" | "track" | "steps"
+            )
+        } else {
+            // Label only major road types by default
+            matches!(highway, 
+                "motorway" | "trunk" | "primary" | "secondary" | "tertiary" | 
+                "motorway_link" | "trunk_link" | "primary_link" | "secondary_link" |
+                "residential" | "unclassified" | "service"
+            )
+        };
+        println!("DEBUG: should_label_road result: {}", result);
+        result
     }
 
-    fn calculate_road_label_position<F>(&self, way: &crate::core::Way, map_data: &MapData, to_svg_coords: &F) -> Option<(f64, f64)>
+    fn calculate_road_label_position<F>(&self, way: &crate::core::Way, map_data: &MapData, to_svg_coords: &F) -> Option<(f64, f64, f64)>
     where
         F: Fn(f64, f64) -> (f64, f64),
     {
@@ -433,22 +450,48 @@ impl SvgExporter {
             return None;
         }
 
-        // Find the middle segment of the road for label placement
-        let mid_index = way.nodes.len() / 2;
+        // Find the middle segment of the road for better label placement
+        let mid_index = if way.nodes.len() > 2 {
+            way.nodes.len() / 2
+        } else {
+            0
+        };
         
-        // Try to use the middle node, or average of two middle nodes
+        // Calculate center point of the middle segment
+        if let (Some(node1_id), Some(node2_id)) = (way.nodes.get(mid_index), way.nodes.get(mid_index + 1)) {
+            if let (Some(node1), Some(node2)) = (map_data.nodes.get(node1_id), map_data.nodes.get(node2_id)) {
+                // Convert both nodes to SVG coordinates
+                let coords1 = to_svg_coords(node1.lat, node1.lon);
+                let coords2 = to_svg_coords(node2.lat, node2.lon);
+                
+                // Calculate midpoint of the segment
+                let center_x = (coords1.0 + coords2.0) / 2.0;
+                let center_y = (coords1.1 + coords2.1) / 2.0;
+                
+                // Calculate rotation angle for text alignment along road
+                let dx = coords2.0 - coords1.0;
+                let dy = coords2.1 - coords1.1;
+                let angle = dy.atan2(dx).to_degrees();
+                
+                // Normalize angle to keep text readable (avoid upside-down text)
+                let normalized_angle = if angle > 90.0 {
+                    angle - 180.0
+                } else if angle < -90.0 {
+                    angle + 180.0
+                } else {
+                    angle
+                };
+                
+                return Some((self.round_value(center_x), self.round_value(center_y), normalized_angle));
+            }
+        }
+        
+        // Fallback: use middle node if segment calculation fails
+        let mid_index = way.nodes.len() / 2;
         if let Some(node_id) = way.nodes.get(mid_index) {
             if let Some(node) = map_data.nodes.get(node_id) {
                 let coords = to_svg_coords(node.lat, node.lon);
-                return Some(self.round_coords(coords));
-            }
-        }
-
-        // Fallback: use first node if middle node is not available
-        if let Some(node_id) = way.nodes.first() {
-            if let Some(node) = map_data.nodes.get(node_id) {
-                let coords = to_svg_coords(node.lat, node.lon);
-                return Some(self.round_coords(coords));
+                return Some((self.round_value(coords.0), self.round_value(coords.1), 0.0));
             }
         }
 
@@ -493,6 +536,75 @@ impl SvgExporter {
         }
 
         Some(data)
+    }
+
+    fn create_road_path_for_text<F>(&self, way: &crate::core::Way, map_data: &MapData, to_svg_coords: &F) -> Option<String>
+    where
+        F: Fn(f64, f64) -> (f64, f64),
+    {
+        if way.nodes.len() < 2 {
+            return None;
+        }
+
+        let mut path_commands = Vec::new();
+        
+        for (i, node_id) in way.nodes.iter().enumerate() {
+            if let Some(node) = map_data.nodes.get(node_id) {
+                let (x, y) = to_svg_coords(node.lat, node.lon);
+                let x = self.round_value(x);
+                let y = self.round_value(y);
+                
+                if i == 0 {
+                    path_commands.push(format!("M{},{}", x, y));
+                } else {
+                    path_commands.push(format!("L{},{}", x, y));
+                }
+            }
+        }
+        
+        if path_commands.is_empty() {
+            None
+        } else {
+            Some(path_commands.join(" "))
+        }
+    }
+
+    fn calculate_text_position_on_path<F>(&self, way: &crate::core::Way, map_data: &MapData, to_svg_coords: &F, text_length: f64) -> Option<f64>
+    where
+        F: Fn(f64, f64) -> (f64, f64),
+    {
+        if way.nodes.len() < 2 {
+            return None;
+        }
+
+        // Calculate total path length
+        let mut total_length = 0.0;
+        let mut prev_point: Option<(f64, f64)> = None;
+        
+        for node_id in &way.nodes {
+            if let Some(node) = map_data.nodes.get(node_id) {
+                let point = to_svg_coords(node.lat, node.lon);
+                if let Some(prev) = prev_point {
+                    let dx = point.0 - prev.0;
+                    let dy = point.1 - prev.1;
+                    total_length += (dx * dx + dy * dy).sqrt();
+                }
+                prev_point = Some(point);
+            }
+        }
+        
+        // Position text at the center of the path, but ensure it fits
+        let center_offset = (total_length - text_length) / 2.0;
+        if center_offset > 0.0 {
+            Some(center_offset)
+        } else {
+            Some(0.0) // Start at beginning if text is longer than path
+        }
+    }
+
+    fn estimate_text_length(&self, text: &str, font_size: f64) -> f64 {
+        // Rough estimation: average character width is about 0.6 * font_size
+        text.len() as f64 * font_size * 0.6
     }
 
     pub fn export<P: AsRef<std::path::Path>>(
@@ -791,5 +903,126 @@ impl SvgExporter {
     fn round_value(&self, value: f64) -> f64 {
         let multiplier = 10_f64.powi(self.precision as i32);
         (value * multiplier).round() / multiplier
+    }
+
+    fn create_curved_text_labels<F>(&self, way: &crate::core::Way, map_data: &MapData, to_svg_coords: &F, text: &str, font_size: f64) -> Vec<Element>
+    where
+        F: Fn(f64, f64) -> (f64, f64),
+    {
+        let mut text_elements = Vec::new();
+        
+        if way.nodes.len() < 2 || text.is_empty() {
+            return text_elements;
+        }
+
+        // Calculate road segments and their properties
+        let mut segments = Vec::new();
+        let mut total_length = 0.0;
+        
+        for i in 0..way.nodes.len()-1 {
+            if let (Some(node1), Some(node2)) = (
+                map_data.nodes.get(&way.nodes[i]),
+                map_data.nodes.get(&way.nodes[i+1])
+            ) {
+                let point1 = to_svg_coords(node1.lat, node1.lon);
+                let point2 = to_svg_coords(node2.lat, node2.lon);
+                
+                let dx = point2.0 - point1.0;
+                let dy = point2.1 - point1.1;
+                let length = (dx * dx + dy * dy).sqrt();
+                let angle = dy.atan2(dx).to_degrees();
+                
+                // Normalize angle to keep text readable
+                let normalized_angle = if angle > 90.0 {
+                    angle - 180.0
+                } else if angle < -90.0 {
+                    angle + 180.0
+                } else {
+                    angle
+                };
+                
+                segments.push((point1, point2, length, normalized_angle));
+                total_length += length;
+            }
+        }
+        
+        if segments.is_empty() {
+            return text_elements;
+        }
+
+        // Estimate character spacing
+        let char_width = font_size * 0.6;
+        let text_length = text.len() as f64 * char_width;
+        
+        // If text is too long for the road, use single centered label
+        if text_length > total_length * 0.8 {
+            if let Some((label_x, label_y, rotation)) = self.calculate_road_label_position(way, map_data, to_svg_coords) {
+                let text_element = Text::new(text)
+                    .set("x", label_x)
+                    .set("y", label_y)
+                    .set("text-anchor", "middle")
+                    .set("dominant-baseline", "central")
+                    .set("font-family", "Noto Sans")
+                    .set("font-size", font_size)
+                    .set("font-weight", "normal")
+                    .set("fill", "#000000")
+                    .set("stroke", "#ffffff")
+                    .set("stroke-width", 4.0)
+                    .set("stroke-linejoin", "round")
+                    .set("stroke-linecap", "round")
+                    .set("paint-order", "stroke fill")
+                    .set("opacity", 1.0)
+                    .set("transform", format!("rotate({:.1} {} {})", rotation, label_x, label_y));
+                
+                text_elements.push(text_element.into());
+            }
+            return text_elements;
+        }
+
+        // Find the best segment for placing the text (longest or most central)
+        let center_position = total_length / 2.0;
+        let mut current_position = 0.0;
+        let mut best_segment_idx = 0;
+        let mut best_segment_score = 0.0;
+        
+        for (i, (_, _, length, _)) in segments.iter().enumerate() {
+            let segment_center = current_position + length / 2.0;
+            let distance_from_center = (segment_center - center_position).abs();
+            let score = length / (1.0 + distance_from_center / 100.0); // Prefer longer segments near center
+            
+            if score > best_segment_score {
+                best_segment_score = score;
+                best_segment_idx = i;
+            }
+            
+            current_position += length;
+        }
+        
+        // Place text on the best segment
+        if let Some((start, end, length, angle)) = segments.get(best_segment_idx) {
+            let center_x = (start.0 + end.0) / 2.0;
+            let center_y = (start.1 + end.1) / 2.0;
+            
+            let text_element = Text::new(text)
+                .set("x", self.round_value(center_x))
+                .set("y", self.round_value(center_y))
+                .set("text-anchor", "middle")
+                .set("dominant-baseline", "central")
+                .set("font-family", "Noto Sans")
+                .set("font-size", font_size)
+                .set("font-weight", "normal")
+                .set("fill", "#000000")
+                .set("stroke", "#ffffff")
+                .set("stroke-width", 4.0)
+                .set("stroke-linejoin", "round")
+                .set("stroke-linecap", "round")
+                .set("paint-order", "stroke fill")
+                .set("opacity", 1.0)
+                .set("transform", format!("rotate({:.1} {} {})", angle, self.round_value(center_x), self.round_value(center_y)));
+            
+            text_elements.push(text_element.into());
+        }
+        
+        text_elements
     }
 }

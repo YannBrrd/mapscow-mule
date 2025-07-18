@@ -83,10 +83,12 @@ impl Exporter {
         center_lat: f64,
         center_lon: f64,
         scale: f64,
+        show_all_road_names: bool,
     ) -> Result<()> {
         match options.format {
             ExportFormat::Svg => {
-                let exporter = svg_export::SvgExporter::new()?;
+                let exporter = svg_export::SvgExporter::new()?
+                    .with_all_road_names(show_all_road_names);
                 exporter.export_with_data(
                     map_data,
                     &options.output_path, 

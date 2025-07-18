@@ -46,17 +46,10 @@ impl Toolbar {
             
             ui.separator();
             
-            // Measurement tools
+            // Selection tools
             ui.group(|ui| {
-                ui.label("Measurement:");
+                ui.label("Selection:");
                 ui.horizontal(|ui| {
-                    if ui.selectable_label(
-                        matches!(gui_state.current_tool, Tool::Measure),
-                        "📏 Measure"
-                    ).clicked() {
-                        gui_state.current_tool = Tool::Measure;
-                    }
-                    
                     if ui.selectable_label(
                         matches!(gui_state.current_tool, Tool::Select),
                         "👆 Select"

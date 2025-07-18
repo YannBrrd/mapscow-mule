@@ -1,0 +1,25 @@
+<svg height="768" shape-rendering="geometricPrecision" style="background-color:#F8F7F7" viewBox="0 0 1024 768" width="1024" xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
+<g id="map" inkscape:groupmode="layer" inkscape:label="Map">
+<rect fill="#F8F7F7" height="768" stroke="none" width="1024" x="0" y="0"/>
+<g id="water" inkscape:groupmode="layer" inkscape:label="Water">
+<path d="M499.498,369 L525.818,369 L525.818,399 L499.498,399 L499.498,369 z" fill="#A5BFDD" opacity="1" stroke="none"/>
+</g>
+<g id="landuse" inkscape:groupmode="layer" inkscape:label="Land Use"/>
+<g id="aeroway" inkscape:groupmode="layer" inkscape:label="Aeroway"/>
+<g id="buildings" inkscape:groupmode="layer" inkscape:label="Buildings">
+<path d="M506.078,374 L519.238,374 L519.238,394 L506.078,394 L506.078,374 z" fill="#E8E9ED" opacity="1" stroke="#d0d0d0" stroke-width="0.2"/>
+</g>
+<g id="railway" inkscape:groupmode="layer" inkscape:label="Railway"/>
+<g id="roads" inkscape:groupmode="layer" inkscape:label="Roads">
+<path d="M502.788,364 L522.528,364 L522.528,404 L502.788,404 L502.788,364 z" fill="none" stroke="#A5B4C2" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+<path d="M502.788,364 L522.528,364 L522.528,404 L502.788,404 L502.788,364 z" fill="none" stroke="#B9C8D6" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"/>
+</g>
+<g id="boundaries" inkscape:groupmode="layer" inkscape:label="Boundaries"/>
+<g id="pois" inkscape:groupmode="layer" inkscape:label="Points of Interest">
+<circle cx="512" cy="384" fill="#95a5a6" opacity="1" r="2.5" stroke="#ffffff" stroke-width="1.5"/>
+</g>
+<g id="labels" inkscape:groupmode="layer" inkscape:label="Labels">
+<text dominant-baseline="central" fill="#000000" font-family="Noto Sans" font-size="10" font-weight="normal" opacity="1" paint-order="stroke fill" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4" text-anchor="middle" transform="rotate(0.0 512.658 404)" x="512.658" y="404">Quai de l'Archevêché</text>
+</g>
+</g>
+</svg>

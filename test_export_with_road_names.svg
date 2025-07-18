@@ -1,21 +1,25 @@
-<svg height="800" shape-rendering="geometricPrecision" viewBox="0 0 1200 800" width="1200" xmlns="http://www.w3.org/2000/svg">
-<g id="map">
-<rect fill="#f8f6f0" height="800" stroke="none" width="1200" x="0" y="0"/>
-<g id="water">
-<path d="M468.401,250 L731.599,250 L731.599,550 L468.401,550 L468.401,250 z" fill="#aed6f1" opacity="0.8" stroke="#5dade2" stroke-width="0.5"/>
+<svg height="800" shape-rendering="geometricPrecision" style="background-color:#F8F7F7" viewBox="0 0 1200 800" width="1200" xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
+<g id="map" inkscape:groupmode="layer" inkscape:label="Map">
+<rect fill="#F8F7F7" height="800" stroke="none" width="1200" x="0" y="0"/>
+<g id="water" inkscape:groupmode="layer" inkscape:label="Water">
+<path d="M468.401,250 L731.599,250 L731.599,550 L468.401,550 L468.401,250 z" fill="#A5BFDD" opacity="1" stroke="none"/>
 </g>
-<g id="landuse"/>
-<g id="buildings">
-<path d="M534.201,300 L665.799,300 L665.799,500 L534.201,500 L534.201,300 z" fill="#e8e8e8" opacity="0.9" stroke="#999999" stroke-width="0.3"/>
+<g id="landuse" inkscape:groupmode="layer" inkscape:label="Land Use"/>
+<g id="aeroway" inkscape:groupmode="layer" inkscape:label="Aeroway"/>
+<g id="buildings" inkscape:groupmode="layer" inkscape:label="Buildings">
+<path d="M534.201,300 L665.799,300 L665.799,500 L534.201,500 L534.201,300 z" fill="#E8E9ED" opacity="1" stroke="#d0d0d0" stroke-width="0.2"/>
 </g>
-<g id="roads">
-<path d="M501.301,200 L698.699,200 L698.699,600 L501.301,600 L501.301,200 z" fill="none" opacity="1" stroke="#f39c12" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"/>
-<text dominant-baseline="central" fill="#2c3e50" font-family="Arial, sans-serif" font-size="12" font-weight="bold" opacity="0.9" paint-order="stroke fill" stroke="#ffffff" stroke-linejoin="round" stroke-width="3" text-anchor="middle" x="698.699" y="600">
-Quai de l'Archevêché
-</text>
+<g id="railway" inkscape:groupmode="layer" inkscape:label="Railway"/>
+<g id="roads" inkscape:groupmode="layer" inkscape:label="Roads">
+<path d="M501.301,200 L698.699,200 L698.699,600 L501.301,600 L501.301,200 z" fill="none" stroke="#A5B4C2" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+<path d="M501.301,200 L698.699,200 L698.699,600 L501.301,600 L501.301,200 z" fill="none" stroke="#B9C8D6" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"/>
 </g>
-<g id="pois">
-<circle cx="593.42" cy="400" fill="#95a5a6" opacity="0.9" r="3" stroke="#ffffff" stroke-width="1"/>
+<g id="boundaries" inkscape:groupmode="layer" inkscape:label="Boundaries"/>
+<g id="pois" inkscape:groupmode="layer" inkscape:label="Points of Interest">
+<circle cx="593.42" cy="400" fill="#95a5a6" opacity="1" r="2.5" stroke="#ffffff" stroke-width="1.5"/>
+</g>
+<g id="labels" inkscape:groupmode="layer" inkscape:label="Labels">
+<text dominant-baseline="central" fill="#000000" font-family="Noto Sans" font-size="10" font-weight="normal" opacity="1" paint-order="stroke fill" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4" text-anchor="middle" transform="rotate(90.0 698.699 400)" x="698.699" y="400">Quai de l'Archevêché</text>
 </g>
 </g>
 </svg>

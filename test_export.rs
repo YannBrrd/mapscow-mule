@@ -32,7 +32,7 @@ fn main() -> Result<()> {
     println!("Center: ({}, {}), Scale: {}", center_lat, center_lon, scale);
     
     // Export SVG with road names
-    let exporter = SvgExporter::new();
+    let exporter = SvgExporter::new()?;
     exporter.export_with_data(
         &map_data,
         "test_export_debug.svg",

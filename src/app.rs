@@ -1,6 +1,6 @@
 use crate::core::MapData;
 use crate::export::{ExportFormat, ExportOptions, Exporter};
-use crate::gui::{GuiState, MapView, StyleEditor, Toolbar, ToolbarAction, Tool};
+use crate::gui::{GuiState, LayersPanel, MapView, StyleEditor, Toolbar, ToolbarAction, Tool};
 use crate::parsers::{osm::OsmParser, gpx::GpxParser, Parser};
 use crate::rendering::MapRenderer;
 use crate::styles::loader::StyleManager;
@@ -21,6 +21,7 @@ pub struct MapscowMule {
     map_view: MapView,
     style_editor: StyleEditor,
     toolbar: Toolbar,
+    layers_panel: LayersPanel,
     
     // File dialogs and I/O
     osm_file_path: Option<PathBuf>,
@@ -54,6 +55,7 @@ impl MapscowMule {
             map_view: MapView::new(),
             style_editor: StyleEditor::new(),
             toolbar: Toolbar::new(),
+            layers_panel: LayersPanel::new(),
             
             osm_file_path: None,
             gpx_file_path: None,
@@ -143,6 +145,7 @@ impl MapscowMule {
                 center_lat,
                 center_lon,
                 scale,
+                self.gui_state.show_all_road_names,
             ) {
                 Ok(_) => {
                     self.status_message = "Map exported successfully".to_string();
@@ -231,6 +234,7 @@ impl eframe::App for MapscowMule {
                 
                 ui.menu_button("View", |ui| {
                     ui.checkbox(&mut self.gui_state.show_tool_panel, "Tool Panel");
+                    ui.checkbox(&mut self.gui_state.show_layers_panel, "Layers Panel");
                     ui.separator();
                     if ui.button("Zoom to Fit").clicked() {
                         self.map_view.zoom_to_fit(&self.map_data);
@@ -405,6 +409,9 @@ impl eframe::App for MapscowMule {
         if self.gui_state.show_style_editor_modal {
             self.style_editor.show_modal(ctx, &mut self.gui_state.show_style_editor_modal, &mut self.style_manager);
         }
+        
+        // Layers Panel (floating window)
+        self.layers_panel.show(ctx, &mut self.gui_state);
         
         // About Dialog
         if self.gui_state.show_about {

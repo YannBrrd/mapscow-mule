@@ -1,7 +1,8 @@
 use mapscow_mule::{
     core::MapData,
-    export::{SvgExporter, ExportOptions, ExportFormat},
-    rendering::{RenderingEngine, MapRenderer},
+    export::{ExportOptions, ExportFormat},
+    export::svg_export::SvgExporter,
+    rendering::engine::RenderingEngine,
     styles::StyleManager,
 };
 use anyhow::Result;

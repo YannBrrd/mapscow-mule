@@ -46,16 +46,9 @@ impl ToolPanel {
         
         ui.separator();
         
-        // Measurement tools
+        // Selection tools
         ui.group(|ui| {
-            ui.label("Measurement:");
-            
-            if ui.selectable_label(
-                matches!(gui_state.current_tool, Tool::Measure),
-                "📏 Measure"
-            ).clicked() {
-                gui_state.current_tool = Tool::Measure;
-            }
+            ui.label("Selection:");
             
             if ui.selectable_label(
                 matches!(gui_state.current_tool, Tool::Select),

@@ -36,7 +36,7 @@ fn main() -> anyhow::Result<()> {
     println!("Found {} roads total, {} with names", road_count, named_road_count);
     
     // Create the SVG exporter with enhanced settings
-    let exporter = SvgExporter::new()
+    let exporter = SvgExporter::new()?
         .with_precision(3)
         .with_anti_aliasing(true)
         .with_layer_separation(true);

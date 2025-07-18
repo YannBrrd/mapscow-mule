@@ -1,0 +1,3 @@
+[[bin]]
+name = "test_road_names"
+path = "test_road_names.rs"

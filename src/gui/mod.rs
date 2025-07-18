@@ -1,3 +1,4 @@
+pub mod layers_panel;
 pub mod map_view;
 pub mod style_editor;
 pub mod tool_panel;
@@ -12,6 +13,7 @@ pub struct GuiState {
     pub show_style_editor_modal: bool,
     pub show_tool_panel: bool,
     pub show_about: bool,
+    pub show_layers_panel: bool,
     pub current_tool: Tool,
     pub zoom_level: f32,
     pub pan_offset: (f32, f32),
@@ -22,12 +24,12 @@ pub struct GuiState {
     pub show_water: bool,
     pub show_landuse: bool,
     pub show_gpx: bool,
+    pub show_all_road_names: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Tool {
     Pan,
-    Measure,
     Select,
     RectangleZoom,
 }
@@ -38,6 +40,7 @@ impl GuiState {
             show_style_editor_modal: false,
             show_tool_panel: false,
             show_about: false,
+            show_layers_panel: false,
             current_tool: Tool::Pan,
             zoom_level: 1.0,
             pan_offset: (0.0, 0.0),
@@ -48,6 +51,7 @@ impl GuiState {
             show_water: true,
             show_landuse: true,
             show_gpx: false,
+            show_all_road_names: false,
         }
     }
 }
@@ -59,6 +63,7 @@ impl Default for GuiState {
 }
 
 // Re-export GUI components
+pub use layers_panel::LayersPanel;
 pub use map_view::MapView;
 pub use style_editor::StyleEditor;
 pub use tool_panel::{ToolPanel, ToolPanelAction};
