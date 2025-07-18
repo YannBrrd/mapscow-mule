@@ -49,16 +49,16 @@ serde_json = "1.0"
 serde_yaml = "0.9"
 toml = "0.8"
 
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
 # Error handling
 anyhow = "1.0"
 thiserror = "1.0"
 
 # File dialogs
 rfd = "0.15"
-
-# Logging
-log = "0.4"
-env_logger = "0.11"
 
 # Math and geometry
 nalgebra = "0.33"

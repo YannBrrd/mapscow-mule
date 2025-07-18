@@ -3,6 +3,7 @@ use crate::gui::{Tool, GuiState};
 use crate::rendering::MapRenderer;
 use crate::styles::loader::StyleManager;
 use egui::{Ui, Response, Sense, Vec2, Pos2, Rect, Color32};
+use log::{debug, info, warn};
 
 /// Main map view widget
 pub struct MapView {
@@ -86,7 +87,7 @@ impl MapView {
     pub fn toggle_selection_mode(&mut self) {
         self.selection_mode = !self.selection_mode;
         self.selection_rect = None; // Clear any existing selection
-        println!("Rectangle zoom selection mode: {}", if self.selection_mode { "ON" } else { "OFF" });
+        debug!("Rectangle zoom selection mode: {}", if self.selection_mode { "ON" } else { "OFF" });
     }
     
     /// Check if selection mode is active
@@ -153,7 +154,7 @@ impl MapView {
         // Handle mouse wheel for zooming FIRST (should work in all modes)
         let scroll_delta = ui.input(|i| i.smooth_scroll_delta);
         if scroll_delta.y != 0.0 {
-            println!("Zoom event detected: scroll_delta.y = {}", scroll_delta.y);
+            debug!("Zoom event detected: scroll_delta.y = {}", scroll_delta.y);
             let zoom_factor = if scroll_delta.y > 0.0 { 1.1 } else { 1.0 / 1.1 };
             
             // Zoom towards mouse position if available
@@ -168,7 +169,7 @@ impl MapView {
                 // Apply zoom
                 let old_scale = self.viewport.scale;
                 self.viewport.scale *= zoom_factor;
-                println!("Zoom applied: {} -> {}", old_scale, self.viewport.scale);
+                debug!("Zoom applied: {} -> {}", old_scale, self.viewport.scale);
                 
                 // Adjust center to zoom towards mouse position
                 self.viewport.center_x = map_x - rel_x / self.viewport.scale;
@@ -177,7 +178,7 @@ impl MapView {
                 // Simple zoom at center
                 let old_scale = self.viewport.scale;
                 self.viewport.scale *= zoom_factor;
-                println!("Simple zoom applied: {} -> {}", old_scale, self.viewport.scale);
+                debug!("Simple zoom applied: {} -> {}", old_scale, self.viewport.scale);
             }
             
             // Clamp zoom level to allow for very detailed viewing
@@ -309,9 +310,9 @@ impl MapView {
         };
         
         // Debug: Print viewport and bounds information
-        println!("Debug: Viewport - center: ({:.6}, {:.6}), scale: {:.6}", 
+        debug!("Viewport - center: ({:.6}, {:.6}), scale: {:.6}", 
                  self.viewport.center_x, self.viewport.center_y, self.viewport.scale);
-        println!("Debug: Calculated bounds - lat: {:.6} to {:.6}, lon: {:.6} to {:.6}",
+        debug!("Calculated bounds - lat: {:.6} to {:.6}, lon: {:.6} to {:.6}",
                  bounds.min_lat, bounds.max_lat, bounds.min_lon, bounds.max_lon);
         
         bounds
@@ -441,7 +442,7 @@ impl MapView {
                 // Use the first coordinate as center
                 let (target_lat, target_lon, desc) = coords[0];
                 
-                println!("DEBUG: zoom_to_fit - centering on: {} at lat={:.6}, lon={:.6}", desc, target_lat, target_lon);
+                debug!("zoom_to_fit - centering on: {} at lat={:.6}, lon={:.6}", desc, target_lat, target_lon);
                 
                 self.viewport.center_x = target_lon;
                 self.viewport.center_y = target_lat;
@@ -449,12 +450,12 @@ impl MapView {
                 // Use moderate zoom to see wider area
                 self.viewport.scale = 50000.0;
                 
-                println!("DEBUG: zoom_to_fit - set viewport center to ({:.6}, {:.6}) with scale {:.1}", 
+                debug!("zoom_to_fit - set viewport center to ({:.6}, {:.6}) with scale {:.1}", 
                          self.viewport.center_x, self.viewport.center_y, self.viewport.scale);
                 
                 // Check which roads exist near these coordinates
                 for (lat, lon, desc) in coords {
-                    println!("DEBUG: Checking roads near {}: lat={:.6}, lon={:.6}", desc, lat, lon);
+                    debug!("Checking roads near {}: lat={:.6}, lon={:.6}", desc, lat, lon);
                     self.debug_roads_near_point(data, lat, lon, 0.002); // ~200m radius
                 }
             }
@@ -495,7 +496,7 @@ impl MapView {
         let median_lat = lats[lats.len() / 2];
         let median_lon = lons[lons.len() / 2];
         
-        println!("calculate_data_bounds: total nodes: {}, median lat: {:.6}, median lon: {:.6}", 
+        debug!("calculate_data_bounds: total nodes: {}, median lat: {:.6}, median lon: {:.6}", 
                  lats.len(), median_lat, median_lon);
         
         // Second pass: exclude extreme outliers based on distance from median
@@ -521,9 +522,9 @@ impl MapView {
         let lat_outlier_threshold = (1.5 * iqr_lat).min(1.0).max(0.01); // Max 1 degree, min 0.01 degree
         let lon_outlier_threshold = (1.5 * iqr_lon).min(1.5).max(0.01); // Max 1.5 degrees, min 0.01 degree
         
-        println!("calculate_data_bounds: IQR-based thresholds - lat: {:.6}, lon: {:.6}", 
+        debug!("calculate_data_bounds: IQR-based thresholds - lat: {:.6}, lon: {:.6}", 
                  lat_outlier_threshold, lon_outlier_threshold);
-        println!("calculate_data_bounds: Q1-Q3 ranges - lat: {:.6} to {:.6}, lon: {:.6} to {:.6}", 
+        debug!("calculate_data_bounds: Q1-Q3 ranges - lat: {:.6} to {:.6}, lon: {:.6} to {:.6}", 
                  q1_lat, q3_lat, q1_lon, q3_lon);
         
         for node in map_data.nodes.values() {
@@ -555,16 +556,16 @@ impl MapView {
         }
         
         if outlier_count > 0 {
-            println!("Excluded {} outlier coordinates out of {} total nodes", outlier_count, total_nodes);
+            debug!("Excluded {} outlier coordinates out of {} total nodes", outlier_count, total_nodes);
         }
         
         // Check if we have valid bounds
         if min_lon == f64::INFINITY {
-            println!("calculate_data_bounds: No valid bounds found after outlier filtering");
+            warn!("calculate_data_bounds: No valid bounds found after outlier filtering");
             return None;
         }
         
-        println!("calculate_data_bounds: raw bounds - lat: {:.6} to {:.6}, lon: {:.6} to {:.6}", 
+        debug!("calculate_data_bounds: raw bounds - lat: {:.6} to {:.6}, lon: {:.6} to {:.6}", 
                  min_lat, max_lat, min_lon, max_lon);
         
         // Add small padding if bounds are too small
@@ -577,7 +578,7 @@ impl MapView {
             max_lat += 0.0005;
         }
         
-        println!("calculate_data_bounds: final bounds - lat: {:.6} to {:.6}, lon: {:.6} to {:.6}", 
+        debug!("calculate_data_bounds: final bounds - lat: {:.6} to {:.6}, lon: {:.6} to {:.6}", 
                  min_lat, max_lat, min_lon, max_lon);
         
         Some(DataBounds {
@@ -593,7 +594,7 @@ impl MapView {
     }
     
     fn debug_roads_near_point(&self, map_data: &MapData, target_lat: f64, target_lon: f64, radius: f64) {
-        println!("DEBUG: Searching for roads near lat={:.6}, lon={:.6}, radius={:.6}", target_lat, target_lon, radius);
+        debug!("Searching for roads near lat={:.6}, lon={:.6}, radius={:.6}", target_lat, target_lon, radius);
         
         let mut found_roads = Vec::new();
         
@@ -628,9 +629,9 @@ impl MapView {
         
         found_roads.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap());
         
-        println!("DEBUG: Found {} roads near target point:", found_roads.len());
+        debug!("Found {} roads near target point:", found_roads.len());
         for (id, name, highway, distance) in found_roads.iter().take(10) {
-            println!("  Way {}: '{}' ({}), distance: {:.6}", id, name, highway, distance);
+            debug!("  Way {}: '{}' ({}), distance: {:.6}", id, name, highway, distance);
         }
     }
     
@@ -739,7 +740,7 @@ impl MapView {
             if let Some(selection) = self.selection_rect.take() {
                 self.zoom_to_selection(&selection, rect);
                 self.selection_mode = false; // Exit selection mode after zoom
-                println!("Rectangle zoom selection completed");
+                info!("Rectangle zoom selection completed");
             }
         }
         
@@ -747,7 +748,7 @@ impl MapView {
         if response.secondary_clicked() {
             self.selection_rect = None;
             self.selection_mode = false;
-            println!("Rectangle zoom selection cancelled");
+            debug!("Rectangle zoom selection cancelled");
         }
     }
     
@@ -1035,7 +1036,7 @@ impl MapView {
                     // Debug: Check for specific roads
                     if let Some(name) = way.tags.get("name") {
                         if name.to_lowercase().contains("bezons") || name.to_lowercase().contains("bernanos") {
-                            println!("DEBUG: '{}' ({}) is OUTSIDE visible bounds", name, highway);
+                            debug!("'{}' ({}) is OUTSIDE visible bounds", name, highway);
                             
                             // Show coordinates and bounds
                             let mut coords = Vec::new();
@@ -1046,11 +1047,11 @@ impl MapView {
                             }
                             
                             if !coords.is_empty() {
-                                println!("  First node: lat={:.6}, lon={:.6}", coords[0].0, coords[0].1);
-                                println!("  Last node: lat={:.6}, lon={:.6}", coords[coords.len()-1].0, coords[coords.len()-1].1);
+                                debug!("  First node: lat={:.6}, lon={:.6}", coords[0].0, coords[0].1);
+                                debug!("  Last node: lat={:.6}, lon={:.6}", coords[coords.len()-1].0, coords[coords.len()-1].1);
                             }
                             
-                            println!("  Visible bounds: lat {:.6} to {:.6}, lon {:.6} to {:.6}", 
+                            debug!("  Visible bounds: lat {:.6} to {:.6}, lon {:.6} to {:.6}", 
                                      visible_bounds.min_lat, visible_bounds.max_lat, 
                                      visible_bounds.min_lon, visible_bounds.max_lon);
                         }
@@ -1061,7 +1062,7 @@ impl MapView {
                 // Debug: Check if this is a road we want to track
                 if let Some(name) = way.tags.get("name") {
                     if name.to_lowercase().contains("bezons") || name.to_lowercase().contains("bernanos") {
-                        println!("DEBUG: '{}' ({}) is INSIDE visible bounds and will be rendered", name, highway);
+                        debug!("'{}' ({}) is INSIDE visible bounds and will be rendered", name, highway);
                     }
                 }
                 
@@ -1090,9 +1091,9 @@ impl MapView {
                         // Debug: Check if this is a specific road
                         if let Some(name) = way.tags.get("name") {
                             if name.to_lowercase().contains("bezons") || name.to_lowercase().contains("bernanos") {
-                                println!("DEBUG: Rendering casing for '{}' - highway: {}, width: {:.1}, color: {:?}", 
+                                debug!("Rendering casing for '{}' - highway: {}, width: {:.1}, color: {:?}", 
                                          name, highway, casing_width, casing_color);
-                                println!("  {} screen points: {:?}", points.len(), 
+                                debug!("  {} screen points: {:?}", points.len(), 
                                          points.iter().take(3).collect::<Vec<_>>());
                             }
                         }
@@ -1106,7 +1107,7 @@ impl MapView {
             }
         }
         
-        println!("DEBUG: Road casings - Total: {}, Filtered: {}, Rendered: {}", 
+        debug!("Road casings - Total: {}, Filtered: {}, Rendered: {}", 
                  total_roads, filtered_roads, rendered_roads);
     }
     
@@ -1142,7 +1143,7 @@ impl MapView {
                     // Debug: Check if this is a specific road
                     if let Some(name) = way.tags.get("name") {
                         if name.to_lowercase().contains("bezons") || name.to_lowercase().contains("bernanos") {
-                            println!("DEBUG: Rendering fill for '{}' - highway: {}, width: {:.1}, color: {:?}", 
+                            debug!("Rendering fill for '{}' - highway: {}, width: {:.1}, color: {:?}", 
                                      name, highway, width, color);
                         }
                     }
@@ -1155,7 +1156,7 @@ impl MapView {
             }
         }
         
-        println!("DEBUG: Road fills - Total: {}, Filtered: {}, Rendered: {}", 
+        debug!("Road fills - Total: {}, Filtered: {}, Rendered: {}", 
                  total_roads, filtered_roads, rendered_roads);
     }
     

@@ -1,6 +1,7 @@
 use crate::core::{MapData, Node, Way, Relation, RelationMember, ElementType};
 use crate::parsers::{Parser, ParseError};
 use anyhow::Result;
+use log::{warn, debug};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::collections::HashMap;
@@ -214,7 +215,7 @@ impl OsmParser {
         
         // Validate coordinates
         if lat < -90.0 || lat > 90.0 || lon < -180.0 || lon > 180.0 {
-            println!("Warning: Invalid coordinates found: lat={}, lon={}, skipping node {}", lat, lon, id);
+            warn!("Invalid coordinates found: lat={}, lon={}, skipping node {}", lat, lon, id);
             return Err(ParseError::InvalidCoordinate { lat, lon }.into());
         }
         
@@ -222,7 +223,7 @@ impl OsmParser {
         // For France/Europe, coordinates should be roughly:
         // Latitude: 40-60 degrees North, Longitude: -10 to 30 degrees East
         if lat < 30.0 || lat > 70.0 || lon < -20.0 || lon > 50.0 {
-            println!("Warning: Suspicious coordinates (possible data error): lat={}, lon={}, node {}", lat, lon, id);
+            warn!("Suspicious coordinates (possible data error): lat={}, lon={}, node {}", lat, lon, id);
         }
         
         Ok(OsmElement::Node { id, lat, lon })
