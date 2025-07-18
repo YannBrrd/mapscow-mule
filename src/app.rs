@@ -1,6 +1,6 @@
 use crate::core::MapData;
 use crate::export::{ExportFormat, ExportOptions, Exporter};
-use crate::gui::{GuiState, LayersPanel, MapView, StyleEditor, Toolbar, ToolbarAction, Tool};
+use crate::gui::{GuiState, GeocodingPanel, GeocodingAction, LayersPanel, MapView, StyleEditor, Toolbar, ToolbarAction, Tool};
 use crate::parsers::{osm::OsmParser, gpx::GpxParser, Parser};
 use crate::rendering::MapRenderer;
 use crate::styles::loader::StyleManager;
@@ -22,6 +22,7 @@ pub struct MapscowMule {
     style_editor: StyleEditor,
     toolbar: Toolbar,
     layers_panel: LayersPanel,
+    geocoding_panel: GeocodingPanel,
     
     // File dialogs and I/O
     osm_file_path: Option<PathBuf>,
@@ -56,6 +57,7 @@ impl MapscowMule {
             style_editor: StyleEditor::new(),
             toolbar: Toolbar::new(),
             layers_panel: LayersPanel::new(),
+            geocoding_panel: GeocodingPanel::new(),
             
             osm_file_path: None,
             gpx_file_path: None,
@@ -235,6 +237,7 @@ impl eframe::App for MapscowMule {
                 ui.menu_button("View", |ui| {
                     ui.checkbox(&mut self.gui_state.show_tool_panel, "Tool Panel");
                     ui.checkbox(&mut self.gui_state.show_layers_panel, "Layers Panel");
+                    ui.checkbox(&mut self.gui_state.show_geocoding_panel, "Search Places");
                     ui.separator();
                     if ui.button("Zoom to Fit").clicked() {
                         self.map_view.zoom_to_fit(&self.map_data);
@@ -412,6 +415,19 @@ impl eframe::App for MapscowMule {
         
         // Layers Panel (floating window)
         self.layers_panel.show(ctx, &mut self.gui_state);
+        
+        // Geocoding Panel (floating window)
+        let geocoding_action = self.geocoding_panel.show(ctx, &mut self.gui_state);
+        
+        // Handle geocoding actions
+        match geocoding_action {
+            GeocodingAction::CenterOnLocation(lat, lon) => {
+                // Center the map on the selected location with a reasonable zoom
+                self.map_view.center_on_coordinates_with_zoom(lat, lon, 50000.0);
+                self.status_message = format!("Centered on location: {:.6}, {:.6}", lat, lon);
+            }
+            GeocodingAction::None => {}
+        }
         
         // About Dialog
         if self.gui_state.show_about {

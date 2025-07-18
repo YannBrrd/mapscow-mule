@@ -1,3 +1,4 @@
+pub mod geocoding_panel;
 pub mod layers_panel;
 pub mod map_view;
 pub mod style_editor;
@@ -7,6 +8,16 @@ pub mod widgets;
 
 use serde::{Deserialize, Serialize};
 
+/// Geocoding result from a search query
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeocodeResult {
+    pub display_name: String,
+    pub lat: f64,
+    pub lon: f64,
+    pub place_type: String,
+    pub importance: f32,
+}
+
 /// GUI state management
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GuiState {
@@ -14,6 +25,7 @@ pub struct GuiState {
     pub show_tool_panel: bool,
     pub show_about: bool,
     pub show_layers_panel: bool,
+    pub show_geocoding_panel: bool,
     pub current_tool: Tool,
     pub zoom_level: f32,
     pub pan_offset: (f32, f32),
@@ -25,6 +37,9 @@ pub struct GuiState {
     pub show_landuse: bool,
     pub show_gpx: bool,
     pub show_all_road_names: bool,
+    pub search_query: String,
+    pub geocoding_results: Vec<GeocodeResult>,
+    pub is_geocoding: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -41,6 +56,7 @@ impl GuiState {
             show_tool_panel: false,
             show_about: false,
             show_layers_panel: false,
+            show_geocoding_panel: false,
             current_tool: Tool::Pan,
             zoom_level: 1.0,
             pan_offset: (0.0, 0.0),
@@ -52,6 +68,9 @@ impl GuiState {
             show_landuse: true,
             show_gpx: false,
             show_all_road_names: false,
+            search_query: String::new(),
+            geocoding_results: Vec::new(),
+            is_geocoding: false,
         }
     }
 }
@@ -63,6 +82,7 @@ impl Default for GuiState {
 }
 
 // Re-export GUI components
+pub use geocoding_panel::{GeocodingPanel, GeocodingAction};
 pub use layers_panel::LayersPanel;
 pub use map_view::MapView;
 pub use style_editor::StyleEditor;

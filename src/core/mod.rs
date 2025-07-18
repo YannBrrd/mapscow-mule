@@ -113,7 +113,17 @@ impl MapData {
     }
     
     pub fn add_way(&mut self, way: Way) {
-        self.ways.insert(way.id, way);
+        // Prevent overwriting ways with better data
+        if let Some(existing) = self.ways.get(&way.id) {
+            // Only replace if new way has more tags or same number of tags but more nodes
+            if way.tags.len() > existing.tags.len() || 
+               (way.tags.len() == existing.tags.len() && way.nodes.len() > existing.nodes.len()) {
+                self.ways.insert(way.id, way);
+            }
+            // Otherwise keep the existing better version
+        } else {
+            self.ways.insert(way.id, way);
+        }
     }
     
     pub fn add_relation(&mut self, relation: Relation) {

@@ -105,6 +105,19 @@ impl MapView {
         self.viewport.scale = self.viewport.scale.clamp(0.001, 500000.0);
     }
     
+    /// Center the map on specific coordinates
+    pub fn center_on_coordinates(&mut self, lat: f64, lon: f64) {
+        self.viewport.center_x = lon;
+        self.viewport.center_y = lat;
+    }
+    
+    /// Center the map on specific coordinates with a specific zoom level
+    pub fn center_on_coordinates_with_zoom(&mut self, lat: f64, lon: f64, zoom_scale: f64) {
+        self.viewport.center_x = lon;
+        self.viewport.center_y = lat;
+        self.viewport.scale = zoom_scale.clamp(0.001, 500000.0);
+    }
+    
     /// Get viewport information for export (center coordinates and scale)
     pub fn get_viewport_info(&self) -> (f64, f64, f64) {
         (self.viewport.center_x, self.viewport.center_y, self.viewport.scale)
@@ -288,12 +301,20 @@ impl MapView {
         let half_width = (rect.width() / 2.0) as f64 / self.viewport.scale;
         let half_height = (rect.height() / 2.0) as f64 / self.viewport.scale;
         
-        VisibleBounds {
+        let bounds = VisibleBounds {
             min_lon: self.viewport.center_x - half_width,
             max_lon: self.viewport.center_x + half_width,
             min_lat: self.viewport.center_y - half_height,
             max_lat: self.viewport.center_y + half_height,
-        }
+        };
+        
+        // Debug: Print viewport and bounds information
+        println!("Debug: Viewport - center: ({:.6}, {:.6}), scale: {:.6}", 
+                 self.viewport.center_x, self.viewport.center_y, self.viewport.scale);
+        println!("Debug: Calculated bounds - lat: {:.6} to {:.6}, lon: {:.6} to {:.6}",
+                 bounds.min_lat, bounds.max_lat, bounds.min_lon, bounds.max_lon);
+        
+        bounds
     }
     
     fn way_intersects_bounds(&self, way: &crate::core::Way, map_data: &MapData, bounds: &VisibleBounds) -> bool {
@@ -409,52 +430,37 @@ impl MapView {
     pub fn zoom_to_fit(&mut self, map_data: &Option<MapData>) {
         if let Some(data) = map_data {
             if let Some(data_bounds) = self.calculate_data_bounds(data) {
-                // Use median coordinates for centering (more accurate than bounds center)
-                let center_x = data_bounds.median_lon;
-                let center_y = data_bounds.median_lat;
+                // Debug multiple coordinates to check rendering
+                let coords = vec![
+                    (48.9443224247288, 2.177457844649215, "Boulevard de Bezons coord 1"),
+                    (48.94396813214317, 2.1806281043179876, "Rue Georges Bernanos coord"),
+                    (48.9448515, 2.1814650, "Georges Bernanos node 331847783"),
+                    (48.9445555, 2.1812572, "Georges Bernanos node 2558905075"),
+                ];
                 
-                println!("zoom_to_fit: bounds - lat: {:.6} to {:.6}, lon: {:.6} to {:.6}", 
-                         data_bounds.bounds.min_lat, data_bounds.bounds.max_lat, data_bounds.bounds.min_lon, data_bounds.bounds.max_lon);
-                println!("zoom_to_fit: using median center - lat: {:.6}, lon: {:.6}", center_y, center_x);
+                // Use the first coordinate as center
+                let (target_lat, target_lon, desc) = coords[0];
                 
-                self.viewport.center_x = center_x;
-                self.viewport.center_y = center_y;
+                println!("DEBUG: zoom_to_fit - centering on: {} at lat={:.6}, lon={:.6}", desc, target_lat, target_lon);
                 
-                // Calculate scale to fit data with some padding
-                let data_width = data_bounds.bounds.max_lon - data_bounds.bounds.min_lon;
-                let data_height = data_bounds.bounds.max_lat - data_bounds.bounds.min_lat;
+                self.viewport.center_x = target_lon;
+                self.viewport.center_y = target_lat;
                 
-                println!("zoom_to_fit: data dimensions - width: {:.6}, height: {:.6}", data_width, data_height);
+                // Use moderate zoom to see wider area
+                self.viewport.scale = 50000.0;
                 
-                if data_width > 0.0 && data_height > 0.0 {
-                    // For geographic coordinates, we need reasonable scaling
-                    // Geographic degrees are small numbers, so we need to scale appropriately
-                    let scale_x = (self.viewport.width as f64 * 0.8) / data_width;
-                    let scale_y = (self.viewport.height as f64 * 0.8) / data_height;
-                    let calculated_scale = scale_x.min(scale_y);
-                    
-                    // Enforce minimum zoom level of 12 (scale = 12000.0)
-                    const MIN_ZOOM_LEVEL: f64 = 12.0;
-                    const MIN_SCALE: f64 = MIN_ZOOM_LEVEL * 1000.0;
-                    
-                    println!("zoom_to_fit: calculated scale: {:.1}, min scale: {:.1}", calculated_scale, MIN_SCALE);
-                    
-                    // Clamp the scale to enforce minimum zoom level and allow for very detailed viewing
-                    // For local maps (few km), we want scales from zoom level 12 to hundreds of thousands for building details
-                    self.viewport.scale = calculated_scale.clamp(MIN_SCALE, 500000.0);
-                    
-                    println!("zoom_to_fit: final scale: {:.1}, zoom level: {:.1}", self.viewport.scale, self.viewport.scale / 1000.0);
-                } else {
-                    // For single points or very small areas, use minimum zoom level 12
-                    const MIN_ZOOM_LEVEL: f64 = 12.0;
-                    self.viewport.scale = MIN_ZOOM_LEVEL * 1000.0;
-                    println!("zoom_to_fit: single point/small area, setting zoom level to {:.1}", MIN_ZOOM_LEVEL);
+                println!("DEBUG: zoom_to_fit - set viewport center to ({:.6}, {:.6}) with scale {:.1}", 
+                         self.viewport.center_x, self.viewport.center_y, self.viewport.scale);
+                
+                // Check which roads exist near these coordinates
+                for (lat, lon, desc) in coords {
+                    println!("DEBUG: Checking roads near {}: lat={:.6}, lon={:.6}", desc, lat, lon);
+                    self.debug_roads_near_point(data, lat, lon, 0.002); // ~200m radius
                 }
             }
         } else {
-            // No data, reset to default with minimum zoom level 12
-            const MIN_ZOOM_LEVEL: f64 = 12.0;
-            self.viewport.scale = MIN_ZOOM_LEVEL * 1000.0;
+            // No data, reset to default
+            self.viewport.scale = 12000.0;
             self.viewport.center_x = 0.0;
             self.viewport.center_y = 0.0;
         }
@@ -584,6 +590,48 @@ impl MapView {
             median_lat,
             median_lon,
         })
+    }
+    
+    fn debug_roads_near_point(&self, map_data: &MapData, target_lat: f64, target_lon: f64, radius: f64) {
+        println!("DEBUG: Searching for roads near lat={:.6}, lon={:.6}, radius={:.6}", target_lat, target_lon, radius);
+        
+        let mut found_roads = Vec::new();
+        
+        for way in map_data.ways.values() {
+            if let Some(highway) = way.tags.get("highway") {
+                // Check if any node in this way is within the radius
+                let mut has_nearby_node = false;
+                let mut min_distance = f64::INFINITY;
+                
+                for &node_id in &way.nodes {
+                    if let Some(node) = map_data.nodes.get(&node_id) {
+                        let lat_diff = node.lat - target_lat;
+                        let lon_diff = node.lon - target_lon;
+                        let distance = (lat_diff * lat_diff + lon_diff * lon_diff).sqrt();
+                        
+                        if distance < min_distance {
+                            min_distance = distance;
+                        }
+                        
+                        if distance <= radius {
+                            has_nearby_node = true;
+                        }
+                    }
+                }
+                
+                if has_nearby_node {
+                    let name = way.tags.get("name").cloned().unwrap_or_else(|| "<unnamed>".to_string());
+                    found_roads.push((way.id, name, highway.clone(), min_distance));
+                }
+            }
+        }
+        
+        found_roads.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap());
+        
+        println!("DEBUG: Found {} roads near target point:", found_roads.len());
+        for (id, name, highway, distance) in found_roads.iter().take(10) {
+            println!("  Way {}: '{}' ({}), distance: {:.6}", id, name, highway, distance);
+        }
     }
     
     fn matches_way_selectors(&self, way: &crate::core::Way, selectors: &[crate::parsers::stylesheet::FeatureSelector]) -> bool {
@@ -995,12 +1043,50 @@ impl MapView {
     fn draw_road_casings(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
         let painter = ui.painter_at(rect);
         
+        let mut total_roads = 0;
+        let mut filtered_roads = 0;
+        let mut rendered_roads = 0;
+        
         for way in map_data.ways.values() {
-            if !self.way_intersects_bounds(way, map_data, visible_bounds) {
-                continue;
-            }
-            
             if let Some(highway) = way.tags.get("highway") {
+                total_roads += 1;
+                
+                if !self.way_intersects_bounds(way, map_data, visible_bounds) {
+                    filtered_roads += 1;
+                    
+                    // Debug: Check for specific roads
+                    if let Some(name) = way.tags.get("name") {
+                        if name.to_lowercase().contains("bezons") || name.to_lowercase().contains("bernanos") {
+                            println!("DEBUG: '{}' ({}) is OUTSIDE visible bounds", name, highway);
+                            
+                            // Show coordinates and bounds
+                            let mut coords = Vec::new();
+                            for &node_id in &way.nodes {
+                                if let Some(node) = map_data.nodes.get(&node_id) {
+                                    coords.push((node.lat, node.lon));
+                                }
+                            }
+                            
+                            if !coords.is_empty() {
+                                println!("  First node: lat={:.6}, lon={:.6}", coords[0].0, coords[0].1);
+                                println!("  Last node: lat={:.6}, lon={:.6}", coords[coords.len()-1].0, coords[coords.len()-1].1);
+                            }
+                            
+                            println!("  Visible bounds: lat {:.6} to {:.6}, lon {:.6} to {:.6}", 
+                                     visible_bounds.min_lat, visible_bounds.max_lat, 
+                                     visible_bounds.min_lon, visible_bounds.max_lon);
+                        }
+                    }
+                    continue;
+                }
+                
+                // Debug: Check if this is a road we want to track
+                if let Some(name) = way.tags.get("name") {
+                    if name.to_lowercase().contains("bezons") || name.to_lowercase().contains("bernanos") {
+                        println!("DEBUG: '{}' ({}) is INSIDE visible bounds and will be rendered", name, highway);
+                    }
+                }
+                
                 let (casing_width, casing_color) = self.get_road_casing_style(highway);
                 
                 if casing_width > 0.0 {
@@ -1011,6 +1097,18 @@ impl MapView {
                         .collect();
                     
                     if points.len() >= 2 {
+                        rendered_roads += 1;
+                        
+                        // Debug: Check if this is a specific road
+                        if let Some(name) = way.tags.get("name") {
+                            if name.to_lowercase().contains("bezons") || name.to_lowercase().contains("bernanos") {
+                                println!("DEBUG: Rendering casing for '{}' - highway: {}, width: {:.1}, color: {:?}", 
+                                         name, highway, casing_width, casing_color);
+                                println!("  {} screen points: {:?}", points.len(), 
+                                         points.iter().take(3).collect::<Vec<_>>());
+                            }
+                        }
+                        
                         painter.add(egui::Shape::line(
                             points,
                             egui::Stroke::new(casing_width, casing_color),
@@ -1019,17 +1117,27 @@ impl MapView {
                 }
             }
         }
+        
+        println!("DEBUG: Road casings - Total: {}, Filtered: {}, Rendered: {}", 
+                 total_roads, filtered_roads, rendered_roads);
     }
     
     fn draw_road_fills(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
         let painter = ui.painter_at(rect);
         
+        let mut total_roads = 0;
+        let mut filtered_roads = 0;
+        let mut rendered_roads = 0;
+        
         for way in map_data.ways.values() {
-            if !self.way_intersects_bounds(way, map_data, visible_bounds) {
-                continue;
-            }
-            
-            if let Some(_highway) = way.tags.get("highway") {
+            if let Some(highway) = way.tags.get("highway") {
+                total_roads += 1;
+                
+                if !self.way_intersects_bounds(way, map_data, visible_bounds) {
+                    filtered_roads += 1;
+                    continue;
+                }
+                
                 // Use style from StyleManager instead of hardcoded colors
                 let ((r, g, b), width) = self.get_way_style(way, style_manager);
                 let color = Color32::from_rgb(r, g, b);
@@ -1041,6 +1149,16 @@ impl MapView {
                     .collect();
                 
                 if points.len() >= 2 {
+                    rendered_roads += 1;
+                    
+                    // Debug: Check if this is a specific road
+                    if let Some(name) = way.tags.get("name") {
+                        if name.to_lowercase().contains("bezons") || name.to_lowercase().contains("bernanos") {
+                            println!("DEBUG: Rendering fill for '{}' - highway: {}, width: {:.1}, color: {:?}", 
+                                     name, highway, width, color);
+                        }
+                    }
+                    
                     painter.add(egui::Shape::line(
                         points,
                         egui::Stroke::new(width, color),
@@ -1048,6 +1166,9 @@ impl MapView {
                 }
             }
         }
+        
+        println!("DEBUG: Road fills - Total: {}, Filtered: {}, Rendered: {}", 
+                 total_roads, filtered_roads, rendered_roads);
     }
     
     fn draw_railways(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {

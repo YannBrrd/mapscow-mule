@@ -1,5 +1,6 @@
 pub mod file_dialog;
 pub mod config;
+pub mod geocoding;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
