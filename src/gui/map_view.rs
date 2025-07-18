@@ -893,11 +893,25 @@ impl MapView {
                     .collect();
                 
                 if points.len() > 2 {
-                    // Google Maps water color: light blue
+                    // Use StyleManager for water colors
+                    let style = style_manager.get_current_style();
+                    let water_color = Self::hex_to_rgb(&style.water.color);
+                    let fill_color = Color32::from_rgba_unmultiplied(
+                        water_color.0, 
+                        water_color.1, 
+                        water_color.2, 
+                        (255.0 * style.water.opacity) as u8
+                    );
+                    
                     painter.add(egui::Shape::convex_polygon(
                         points,
-                        Color32::from_rgb(170, 218, 255), // Light blue fill
-                        egui::Stroke::new(1.0, Color32::from_rgb(110, 180, 240)), // Slightly darker border
+                        fill_color,
+                        egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(
+                            water_color.0.saturating_sub(30), 
+                            water_color.1.saturating_sub(30), 
+                            water_color.2.saturating_sub(30), 
+                            255
+                        )),
                     ));
                 }
             }
@@ -906,6 +920,7 @@ impl MapView {
     
     fn draw_landuse_areas(&self, ui: &mut Ui, rect: Rect, map_data: &MapData, visible_bounds: &VisibleBounds, style_manager: &StyleManager) {
         let painter = ui.painter_at(rect);
+        let style = style_manager.get_current_style();
         
         for way in map_data.ways.values() {
             if !self.way_intersects_bounds(way, map_data, visible_bounds) || !way.is_closed {
@@ -915,70 +930,33 @@ impl MapView {
             // Check if this way has landuse, leisure, or natural tags we care about
             let mut should_draw = false;
             let mut fill_color = Color32::TRANSPARENT;
-            let mut stroke_color = Color32::TRANSPARENT;
+            let stroke_color = Color32::from_rgb(200, 200, 200); // Default light stroke
             
+            // Use StyleManager for landuse colors
             if let Some(landuse) = way.tags.get("landuse") {
-                match landuse.as_str() {
-                    "forest" | "wood" => {
-                        fill_color = Color32::from_rgb(200, 220, 188);
-                        stroke_color = Color32::from_rgb(180, 200, 168);
-                        should_draw = true;
-                    },
-                    "grass" | "meadow" => {
-                        fill_color = Color32::from_rgb(220, 240, 200);
-                        stroke_color = Color32::from_rgb(200, 220, 180);
-                        should_draw = true;
-                    },
-                    "residential" => {
-                        fill_color = Color32::from_rgb(240, 240, 235);
-                        stroke_color = Color32::from_rgb(220, 220, 215);
-                        should_draw = true;
-                    },
-                    "commercial" => {
-                        fill_color = Color32::from_rgb(245, 240, 235);
-                        stroke_color = Color32::from_rgb(225, 220, 215);
-                        should_draw = true;
-                    },
-                    "industrial" => {
-                        fill_color = Color32::from_rgb(235, 235, 240);
-                        stroke_color = Color32::from_rgb(215, 215, 220);
-                        should_draw = true;
-                    },
-                    _ => {}
+                if let Some(color_str) = style.get_landuse_color(landuse) {
+                    let (r, g, b) = Self::hex_to_rgb(color_str);
+                    fill_color = Color32::from_rgb(r, g, b);
+                    should_draw = true;
                 }
             } else if let Some(leisure) = way.tags.get("leisure") {
-                match leisure.as_str() {
-                    "park" | "garden" => {
-                        fill_color = Color32::from_rgb(200, 240, 200);
-                        stroke_color = Color32::from_rgb(180, 220, 180);
-                        should_draw = true;
-                    },
-                    "playground" => {
-                        fill_color = Color32::from_rgb(255, 245, 220);
-                        stroke_color = Color32::from_rgb(235, 225, 200);
-                        should_draw = true;
-                    },
-                    _ => {}
+                if let Some(color_str) = style.get_leisure_color(leisure) {
+                    let (r, g, b) = Self::hex_to_rgb(color_str);
+                    fill_color = Color32::from_rgb(r, g, b);
+                    should_draw = true;
                 }
             } else if let Some(natural) = way.tags.get("natural") {
-                match natural.as_str() {
-                    "wood" | "forest" => {
-                        fill_color = Color32::from_rgb(200, 220, 188);
-                        stroke_color = Color32::from_rgb(180, 200, 168);
-                        should_draw = true;
-                    },
-                    "grassland" => {
-                        fill_color = Color32::from_rgb(220, 240, 200);
-                        stroke_color = Color32::from_rgb(200, 220, 180);
-                        should_draw = true;
-                    },
-                    _ => {}
+                if let Some(color_str) = style.get_natural_color(natural) {
+                    let (r, g, b) = Self::hex_to_rgb(color_str);
+                    fill_color = Color32::from_rgb(r, g, b);
+                    should_draw = true;
                 }
             }
             
             if !should_draw {
                 continue;
             }
+
             
             let points: Vec<Pos2> = way.nodes
                 .iter()
@@ -1087,7 +1065,17 @@ impl MapView {
                     }
                 }
                 
-                let (casing_width, casing_color) = self.get_road_casing_style(highway);
+                let (casing_width, casing_color) = {
+                    let style = style_manager.get_current_style();
+                    let (_, _, border_color, border_width) = style.get_road_style(highway);
+                    
+                    if border_width > 0.0 && !border_color.is_empty() {
+                        let (r, g, b) = Self::hex_to_rgb(border_color);
+                        (border_width, Color32::from_rgb(r, g, b))
+                    } else {
+                        (0.0, Color32::TRANSPARENT)
+                    }
+                };
                 
                 if casing_width > 0.0 {
                     let points: Vec<Pos2> = way.nodes
@@ -1187,10 +1175,14 @@ impl MapView {
                     .collect();
                 
                 if points.len() >= 2 {
+                    // Use StyleManager for railway styling
+                    let style = style_manager.get_current_style();
+                    let rail_color = Self::hex_to_rgb(&style.railway.rail_color);
+                    
                     // Draw railway as dashed line
                     painter.add(egui::Shape::dashed_line(
                         &points,
-                        egui::Stroke::new(2.0, Color32::from_rgb(120, 120, 120)),
+                        egui::Stroke::new(style.railway.rail_width, Color32::from_rgb(rail_color.0, rail_color.1, rail_color.2)),
                         10.0,
                         5.0,
                     ));
@@ -1335,7 +1327,9 @@ impl MapView {
         // No longer drawing individual OSM nodes or their labels
     }
     
-    // Google Maps-style helper methods for styling
+    // Legacy hardcoded style functions - replaced with StyleManager
+    // These remain for backward compatibility but should not be used
+    #[allow(dead_code)]
     
     fn get_road_casing_style(&self, highway: &str) -> (f32, Color32) {
         match highway {
