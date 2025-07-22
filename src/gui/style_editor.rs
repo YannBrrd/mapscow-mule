@@ -54,6 +54,7 @@ impl StyleEditor {
     
     /// Jump to a specific TOML section based on selected map element
     pub fn jump_to_element_style(&mut self, selected_element: &SelectedElement) {
+        info!("jump_to_element_style called with element ID: {}", selected_element.element_id);
         self.selected_tab = StyleEditorTab::TomlEditor;
         let toml_section = selected_element.style_info.toml_section.clone();
         self.jump_to_section = Some(toml_section.clone());
@@ -63,7 +64,7 @@ impl StyleEditor {
             selected_element.style_info.subcategory));
         self.selected_element_info = Some(selected_element.clone());
         
-        info!("Style editor jumping to section: {}", toml_section);
+        info!("Style editor jumping to section: {}, stored element: {:?}", toml_section, self.selected_element_info.is_some());
         
         // Force load the current style if not already loaded
         if self.toml_content.is_empty() {
@@ -108,6 +109,7 @@ impl StyleEditor {
         // Show selected element info if available
         let selected_element_clone = self.selected_element_info.clone();
         if let Some(ref element) = selected_element_clone {
+            info!("Displaying selected element info in style editor: {:?}", element.element_id);
             ui.group(|ui| {
                 ui.horizontal(|ui| {
                     ui.colored_label(egui::Color32::LIGHT_BLUE, "🎯 Selected Element:");

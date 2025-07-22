@@ -376,11 +376,45 @@ impl eframe::App for MapscowMule {
         // Status bar
         TopBottomPanel::bottom("statusbar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                // Show mode-specific instructions
+                // Show mode-specific instructions and selected element info
                 match self.gui_state.current_tool {
                     Tool::Select => {
                         ui.colored_label(egui::Color32::LIGHT_BLUE, "🎯 Select Mode:");
-                        ui.label("Click on map elements to select and edit their style");
+                        
+                        // Check if we have a selected element
+                        let selected_element = self.map_view.get_selected_element().cloned();
+                        if let Some(selected_element) = selected_element {
+                            // Show selected element info in status bar
+                            ui.separator();
+                            ui.colored_label(egui::Color32::YELLOW, "Selected:");
+                            ui.label(format!("{} #{}", 
+                                match selected_element.element_type {
+                                    crate::gui::map_view::ElementType::Way => "Way",
+                                    crate::gui::map_view::ElementType::Node => "Node",
+                                    crate::gui::map_view::ElementType::Relation => "Relation",
+                                },
+                                selected_element.element_id));
+                            
+                            ui.separator();
+                            ui.colored_label(egui::Color32::GREEN, "Section:");
+                            ui.add(egui::Label::new(
+                                egui::RichText::new(format!("[{}]", selected_element.style_info.toml_section))
+                                    .code()
+                                    .color(egui::Color32::WHITE)
+                            ).selectable(true));
+                            
+                            ui.separator();
+                            if ui.button("🎨 Edit Style").clicked() {
+                                self.style_editor.jump_to_element_style(&selected_element);
+                                self.gui_state.show_style_editor_modal = true;
+                            }
+                            
+                            if ui.small_button("📋 Copy").clicked() {
+                                ui.output_mut(|o| o.copied_text = selected_element.style_info.toml_section.clone());
+                            }
+                        } else {
+                            ui.label("Click on map elements to select and edit their style");
+                        }
                     }
                     Tool::Pan => {
                         ui.label(&self.status_message);
@@ -417,63 +451,8 @@ impl eframe::App for MapscowMule {
             
             let (response, hover_pos) = self.map_view.show(ui, &self.map_data, &self.renderer, &self.style_manager, &self.gui_state);
             
-            // Handle element selection in Select mode
+            // Handle clear selection with keyboard shortcut in Select mode
             if self.gui_state.current_tool == Tool::Select {
-                // Get the selected element (clone it to avoid borrow issues)
-                let selected_element = self.map_view.get_selected_element().cloned();
-                
-                if let Some(selected_element) = selected_element {
-                    // Show selection info
-                    ui.vertical(|ui| {
-                        // First row: Element info
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 8.0;
-                            ui.colored_label(egui::Color32::LIGHT_BLUE, "🎯 Selected:");
-                            ui.label(format!("{} {}", 
-                                    match selected_element.element_type {
-                                        crate::gui::map_view::ElementType::Way => "Way",
-                                        crate::gui::map_view::ElementType::Node => "Node",
-                                        crate::gui::map_view::ElementType::Relation => "Relation",
-                                    },
-                                    selected_element.element_id));
-                            
-                            ui.separator();
-                            ui.label(format!("Type: {}", selected_element.style_info.category));
-                        });
-                        
-                        // Second row: TOML section info with copy button
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 8.0;
-                            ui.colored_label(egui::Color32::YELLOW, "📋 TOML Section:");
-                            
-                            // Display the TOML section name in a selectable label
-                            let toml_section = &selected_element.style_info.toml_section;
-                            ui.add(egui::Label::new(
-                                egui::RichText::new(format!("[{}]", toml_section))
-                                    .code()
-                                    .color(egui::Color32::WHITE)
-                            ).selectable(true));
-                            
-                            // Copy to clipboard button
-                            if ui.small_button("📋 Copy").clicked() {
-                                ui.output_mut(|o| o.copied_text = toml_section.clone());
-                            }
-                        });
-                        
-                        // Third row: Actions
-                        ui.horizontal(|ui| {
-                            if ui.button("🎨 Edit Style").clicked() {
-                                self.style_editor.jump_to_element_style(&selected_element);
-                                self.gui_state.show_style_editor_modal = true;
-                            }
-                            
-                            ui.separator();
-                            ui.label("Press 'C' to clear selection");
-                        });
-                    });
-                }
-                
-                // Handle clear selection with keyboard shortcut
                 if ui.input(|i| i.key_pressed(egui::Key::C)) {
                     self.map_view.clear_selection();
                 }

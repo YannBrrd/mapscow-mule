@@ -79,11 +79,11 @@ pub struct PoiStyle {
 pub struct LabelStyle {
     pub font_family: String,
     pub road_label_stroke: String,
-    pub road_label_stroke_width: u32,
+    pub road_label_stroke_width: f32,
     pub poi_label_stroke: String,
-    pub poi_label_stroke_width: u32,
+    pub poi_label_stroke_width: f32,
     pub place_label_stroke: String,
-    pub place_label_stroke_width: u32,
+    pub place_label_stroke_width: f32,
 }
 
 impl MapStyle {
