@@ -85,7 +85,7 @@ impl MapView {
         self.selected_element = None;
     }
     
-    pub fn show(&mut self, ui: &mut Ui, map_data: &Option<MapData>, renderer: &MapRenderer, style_manager: &StyleManager, gui_state: &GuiState) -> (Response, Option<Pos2>) {
+    pub fn show(&mut self, ui: &mut Ui, map_data: &Option<MapData>, renderer: &MapRenderer, style_manager: &StyleManager, gui_state: &GuiState, modal_is_open: bool) -> (Response, Option<Pos2>) {
         let available_size = ui.available_size();
         let (rect, mut response) = ui.allocate_exact_size(available_size, Sense::click_and_drag().union(Sense::hover()));
         
@@ -107,7 +107,7 @@ impl MapView {
         self.viewport.height = rect.height();
         
         // Handle input (pass the rect for coordinate conversion)
-        self.handle_input(ui, &response, rect, map_data, gui_state);
+        self.handle_input(ui, &response, rect, map_data, gui_state, modal_is_open);
         
         // Draw the map
         self.draw_map(ui, rect, map_data, renderer, style_manager, gui_state);
@@ -186,39 +186,42 @@ impl MapView {
         status_parts.join(" | ")
     }
 
-    fn handle_input(&mut self, ui: &mut Ui, response: &Response, rect: Rect, map_data: &Option<MapData>, gui_state: &GuiState) {
-        // Handle mouse wheel for zooming FIRST (should work in all modes)
-        let scroll_delta = ui.input(|i| i.smooth_scroll_delta);
-        if scroll_delta.y != 0.0 {
-            debug!("Zoom event detected: scroll_delta.y = {}", scroll_delta.y);
-            let zoom_factor = if scroll_delta.y > 0.0 { 1.1 } else { 1.0 / 1.1 };
-            
-            // Zoom towards mouse position if available
-            if let Some(mouse_pos) = response.hover_pos() {
-                let rel_x = (mouse_pos.x - rect.center().x) as f64;
-                let rel_y = -(mouse_pos.y - rect.center().y) as f64; // Flip Y
+    fn handle_input(&mut self, ui: &mut Ui, response: &Response, rect: Rect, map_data: &Option<MapData>, gui_state: &GuiState, modal_is_open: bool) {
+        // Skip scroll handling if a modal is open to prevent interference
+        if !modal_is_open {
+            // Handle mouse wheel for zooming FIRST (should work in all modes)
+            let scroll_delta = ui.input(|i| i.smooth_scroll_delta);
+            if scroll_delta.y != 0.0 {
+                debug!("Zoom event detected: scroll_delta.y = {}", scroll_delta.y);
+                let zoom_factor = if scroll_delta.y > 0.0 { 1.1 } else { 1.0 / 1.1 };
                 
-                // Convert to map coordinates
-                let map_x = self.viewport.center_x + rel_x / self.viewport.scale;
-                let map_y = self.viewport.center_y + rel_y / self.viewport.scale;
+                // Zoom towards mouse position if available
+                if let Some(mouse_pos) = response.hover_pos() {
+                    let rel_x = (mouse_pos.x - rect.center().x) as f64;
+                    let rel_y = -(mouse_pos.y - rect.center().y) as f64; // Flip Y
+                    
+                    // Convert to map coordinates
+                    let map_x = self.viewport.center_x + rel_x / self.viewport.scale;
+                    let map_y = self.viewport.center_y + rel_y / self.viewport.scale;
+                    
+                    // Apply zoom
+                    let old_scale = self.viewport.scale;
+                    self.viewport.scale *= zoom_factor;
+                    debug!("Zoom applied: {} -> {}", old_scale, self.viewport.scale);
+                    
+                    // Adjust center to zoom towards mouse position
+                    self.viewport.center_x = map_x - rel_x / self.viewport.scale;
+                    self.viewport.center_y = map_y - rel_y / self.viewport.scale;
+                } else {
+                    // Simple zoom at center
+                    let old_scale = self.viewport.scale;
+                    self.viewport.scale *= zoom_factor;
+                    debug!("Simple zoom applied: {} -> {}", old_scale, self.viewport.scale);
+                }
                 
-                // Apply zoom
-                let old_scale = self.viewport.scale;
-                self.viewport.scale *= zoom_factor;
-                debug!("Zoom applied: {} -> {}", old_scale, self.viewport.scale);
-                
-                // Adjust center to zoom towards mouse position
-                self.viewport.center_x = map_x - rel_x / self.viewport.scale;
-                self.viewport.center_y = map_y - rel_y / self.viewport.scale;
-            } else {
-                // Simple zoom at center
-                let old_scale = self.viewport.scale;
-                self.viewport.scale *= zoom_factor;
-                debug!("Simple zoom applied: {} -> {}", old_scale, self.viewport.scale);
+                // Clamp zoom level to allow for very detailed viewing
+                self.viewport.scale = self.viewport.scale.clamp(0.001, 500000.0);
             }
-            
-            // Clamp zoom level to allow for very detailed viewing
-            self.viewport.scale = self.viewport.scale.clamp(0.001, 500000.0);
         }
 
         // Handle rectangle selection mode

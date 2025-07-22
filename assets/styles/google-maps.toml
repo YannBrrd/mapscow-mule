@@ -55,34 +55,34 @@ administrative_opacity = 0.7
 # Font styling for labels
 font_family = "Noto Sans"
 road_label_stroke = "#ffffff"
-road_label_stroke_width = 3
+road_label_stroke_width = 3.0
 poi_label_stroke = "#ffffff"
-poi_label_stroke_width = 2
+poi_label_stroke_width = 2.5
 place_label_stroke = "#ffffff"
-place_label_stroke_width = 2
+place_label_stroke_width = 2.0
 
 # Road styling with nested tables for better structure
 [roads.motorway]
 color = "#FFFFFF"            # White roads like Google Maps
-width = 4
+width = 4.5
 border_color = "#B4C4D1"     # Soft blue-gray border
-border_width = 1
+border_width = 1.0
 
 [roads.motorway_link]
 color = "#FFFFFF"
-width = 3
+width = 3.2
 border_color = "#B4C4D1"
-border_width = 1
+border_width = 0.8
 
 [roads.trunk]
 color = "#FFFFFF"
-width = 4
+width = 4.0
 border_color = "#B4C4D1"
-border_width = 1
+border_width = 1.0
 
 [roads.trunk_link]
 color = "#FFFFFF"
-width = 2
+width = 2.5
 border_color = "#B4C4D1"
 border_width = 1
 
@@ -120,13 +120,13 @@ border_width = 1
 color = "#FFFFFF"
 width = 2
 border_color = "#B4C4D1"
-border_width = 1
+border_width = 5
 
 [roads.residential]
-color = "#FFFFFF"
-width = 2
+color = "#F7F6F6"
+width = 5.0
 border_color = "#B4C4D1"
-border_width = 1
+border_width = 2
 
 [roads.service]
 color = "#FFFFFF"

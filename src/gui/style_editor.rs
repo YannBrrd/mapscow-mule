@@ -16,6 +16,8 @@ pub struct StyleEditor {
     selected_tab: StyleEditorTab,
     // For live preview
     has_unsaved_changes: bool,
+    needs_validation: bool, // Track if content needs validation
+    last_validation_successful: bool, // Track if last validation was successful
     // Color editing
     editing_colors: HashMap<String, Color32>,
     // Element selection integration
@@ -24,6 +26,15 @@ pub struct StyleEditor {
     load_current_style_needed: bool,
     last_searched_element: Option<String>, // Track the last element we searched for
     selected_element_info: Option<SelectedElement>, // Store full selected element info
+    // Search functionality
+    search_query: String,
+    search_results: Vec<SearchResult>,
+    current_search_index: usize,
+    search_is_case_sensitive: bool,
+    search_use_regex: bool,
+    // Replace functionality
+    replace_query: String,
+    show_replace: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -31,6 +42,15 @@ enum StyleEditorTab {
     TomlEditor,
     VisualEditor,
     ColorPalette,
+}
+
+#[derive(Debug, Clone)]
+struct SearchResult {
+    line_number: usize,
+    column_start: usize,
+    column_end: usize,
+    line_content: String,
+    match_text: String,
 }
 
 impl StyleEditor {
@@ -43,12 +63,23 @@ impl StyleEditor {
             toml_error: None,
             selected_tab: StyleEditorTab::TomlEditor,
             has_unsaved_changes: false,
+            needs_validation: false,
+            last_validation_successful: true,
             editing_colors: HashMap::new(),
             jump_to_section: None,
             search_highlight: None,
             load_current_style_needed: false,
             last_searched_element: None,
             selected_element_info: None,
+            // Search functionality
+            search_query: String::new(),
+            search_results: Vec::new(),
+            current_search_index: 0,
+            search_is_case_sensitive: false,
+            search_use_regex: false,
+            // Replace functionality
+            replace_query: String::new(),
+            show_replace: false,
         }
     }
     
@@ -90,7 +121,12 @@ impl StyleEditor {
                     self.load_current_style_needed = false;
                 }
                 
-                self.show_content(ui, style_manager, gui_state);
+                // Add a scroll area that captures scroll events for the entire modal content
+                egui::ScrollArea::vertical()
+                    .max_height(f32::INFINITY)
+                    .show(ui, |ui| {
+                        self.show_content(ui, style_manager, gui_state);
+                    });
             });
     }
     
@@ -188,7 +224,10 @@ impl StyleEditor {
         
         // Action buttons
         ui.horizontal(|ui| {
-            if ui.button("💾 Save Style").clicked() {
+            // Gray out save button if we have unsaved changes that need validation
+            let can_save = !self.has_unsaved_changes || (self.has_unsaved_changes && !self.needs_validation);
+            
+            if ui.add_enabled(can_save, egui::Button::new("💾 Save Style")).clicked() {
                 self.save_style(style_manager);
             }
             
@@ -597,6 +636,9 @@ impl StyleEditor {
             
             if ui.button("🔄 Validate").clicked() {
                 self.validate_toml();
+                self.needs_validation = false;
+                // Set validation success based on whether there's a TOML error
+                self.last_validation_successful = self.toml_error.is_none();
             }
             
         // Show section status banner
@@ -654,25 +696,110 @@ impl StyleEditor {
         let text_edit_response = ScrollArea::vertical()
             .max_height(400.0)
             .show(ui, |ui| {
-                // Add search functionality
-                ui.horizontal(|ui| {
-                    if let Some(ref highlight) = self.search_highlight {
-                        ui.label("🔍 Highlighting:");
-                        ui.monospace(highlight);
-                        
-                        // Show found section info
-                        if let Some(pos) = self.find_section_in_content(highlight) {
-                            let line_num = self.toml_content[..pos].matches('\n').count() + 1;
-                            ui.colored_label(egui::Color32::LIGHT_GREEN, format!("✓ Found at line {}", line_num));
-                        } else {
-                            ui.colored_label(egui::Color32::ORANGE, "⚠ Section not found");
-                            ui.label("→ You can add this section manually to customize styling");
-                        }
-                        
-                        if ui.button("Clear").clicked() {
-                            self.search_highlight = None;
-                        }
+                // Enhanced search functionality
+                ui.vertical(|ui| {
+                    // Section highlighting (from element selection)
+                    let search_highlight_clone = self.search_highlight.clone();
+                    if let Some(ref highlight) = search_highlight_clone {
+                        ui.horizontal(|ui| {
+                            ui.label("🎯 Section:");
+                            ui.monospace(highlight);
+                            
+                            // Show found section info
+                            if let Some(pos) = self.find_section_in_content(highlight) {
+                                let line_num = self.toml_content[..pos].matches('\n').count() + 1;
+                                ui.colored_label(egui::Color32::LIGHT_GREEN, format!("✓ Found at line {}", line_num));
+                            } else {
+                                ui.colored_label(egui::Color32::ORANGE, "⚠ Section not found");
+                                ui.label("→ You can add this section manually to customize styling");
+                            }
+                            
+                            if ui.button("Clear").clicked() {
+                                self.search_highlight = None;
+                            }
+                        });
                     }
+                    
+                    // Text search interface
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("🔍 Search:");
+                            
+                            let search_response = ui.add(
+                                egui::TextEdit::singleline(&mut self.search_query)
+                                    .hint_text("Search in TOML content...")
+                                    .desired_width(200.0)
+                            );
+                            
+                            if search_response.changed() {
+                                self.perform_search();
+                            }
+                            
+                            // Toggle replace panel
+                            if ui.button("🔄").on_hover_text("Show replace options").clicked() {
+                                self.show_replace = !self.show_replace;
+                            }
+                            
+                            // Search options
+                            ui.checkbox(&mut self.search_is_case_sensitive, "Case sensitive");
+                            
+                            // Search navigation
+                            if !self.search_results.is_empty() {
+                                ui.separator();
+                                ui.label(format!("{}/{}", self.current_search_index + 1, self.search_results.len()));
+                                
+                                if ui.button("⬆").on_hover_text("Previous result (Shift+F3)").clicked() {
+                                    self.prev_search_result();
+                                }
+                                
+                                if ui.button("⬇").on_hover_text("Next result (F3)").clicked() {
+                                    self.next_search_result();
+                                }
+                                
+                                // Show current result info
+                                if let Some(result) = self.get_current_search_result() {
+                                    ui.separator();
+                                    ui.colored_label(egui::Color32::LIGHT_GREEN, 
+                                        format!("Line {}: '{}'", result.line_number, result.match_text));
+                                }
+                            } else if !self.search_query.is_empty() {
+                                ui.separator();
+                                ui.colored_label(egui::Color32::YELLOW, "No results found");
+                            }
+                            
+                            // Clear search
+                            if !self.search_query.is_empty() && ui.button("✖").on_hover_text("Clear search").clicked() {
+                                self.search_query.clear();
+                                self.search_results.clear();
+                                self.current_search_index = 0;
+                                self.show_replace = false;
+                            }
+                        });
+                        
+                        // Replace interface (collapsible)
+                        if self.show_replace {
+                            ui.horizontal(|ui| {
+                                ui.label("↻ Replace:");
+                                
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut self.replace_query)
+                                        .hint_text("Replace with...")
+                                        .desired_width(200.0)
+                                );
+                                
+                                // Replace buttons
+                                if !self.search_results.is_empty() {
+                                    if ui.button("Replace").on_hover_text("Replace current result").clicked() {
+                                        self.replace_current();
+                                    }
+                                    
+                                    if ui.button("Replace All").on_hover_text("Replace all occurrences").clicked() {
+                                        self.replace_all();
+                                    }
+                                }
+                            });
+                        }
+                    });
                 });
                 
                 // Create a text editor with better highlighting
@@ -692,8 +819,29 @@ impl StyleEditor {
         
         if text_edit_response.inner.changed() {
             self.has_unsaved_changes = true;
-            // Validate on change
-            self.validate_toml();
+            self.needs_validation = true;
+            // Clear any previous validation state since content changed
+            self.toml_error = None;
+        }
+        
+        // Handle keyboard shortcuts for search
+        if ui.input(|i| i.key_pressed(egui::Key::F) && i.modifiers.ctrl) {
+            // Focus search (Ctrl+F) - for now just highlight that search is available
+            // In a real implementation, you'd focus the search text field
+        }
+        
+        if ui.input(|i| i.key_pressed(egui::Key::H) && i.modifiers.ctrl) {
+            // Show replace (Ctrl+H)
+            self.show_replace = !self.show_replace;
+        }
+        
+        if !self.search_results.is_empty() {
+            if ui.input(|i| i.key_pressed(egui::Key::F3)) {
+                self.next_search_result();
+            }
+            if ui.input(|i| i.key_pressed(egui::Key::F3) && i.modifiers.shift) {
+                self.prev_search_result();
+            }
         }
         
         // Quick navigation buttons for common sections
@@ -715,6 +863,31 @@ impl StyleEditor {
                 if ui.small_button(label).clicked() {
                     self.jump_to_section = Some(section.to_string());
                     self.search_highlight = Some(section.to_string());
+                }
+            }
+        });
+        
+        // Quick search patterns
+        ui.separator();
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Quick search:");
+            
+            let patterns = vec![
+                ("🎨 Colors", "#"),
+                ("📏 Widths", "width"),
+                ("🔢 Numbers", r"\d+"),
+                ("⚪ Borders", "border"),
+                ("📝 Fonts", "font"),
+                ("🔧 Config", "="),
+            ];
+            
+            for (label, pattern) in patterns {
+                if ui.small_button(label).clicked() {
+                    self.search_query = pattern.to_string();
+                    if pattern.contains(r"\d") {
+                        self.search_use_regex = true;
+                    }
+                    self.perform_search();
                 }
             }
         });
@@ -960,6 +1133,8 @@ impl StyleEditor {
             match std::fs::write(&style_path, &self.toml_content) {
                 Ok(_) => {
                     self.has_unsaved_changes = false;
+                    self.needs_validation = false;
+                    self.last_validation_successful = true;
                     // Reload the style in the manager
                     if let Err(e) = style_manager.load_style(&style_name) {
                         self.toml_error = Some(format!("Failed to reload style: {}", e));
@@ -1119,6 +1294,157 @@ impl StyleEditor {
         }
         
         self.toml_content = new_lines.join("\n");
+    }
+    
+    /// Perform search in TOML content
+    fn perform_search(&mut self) {
+        self.search_results.clear();
+        self.current_search_index = 0;
+        
+        if self.search_query.is_empty() {
+            return;
+        }
+        
+        let lines: Vec<&str> = self.toml_content.lines().collect();
+        
+        for (line_index, line) in lines.iter().enumerate() {
+            let search_line = if self.search_is_case_sensitive {
+                line.to_string()
+            } else {
+                line.to_lowercase()
+            };
+            
+            let search_query = if self.search_is_case_sensitive {
+                self.search_query.clone()
+            } else {
+                self.search_query.to_lowercase()
+            };
+            
+            if self.search_use_regex {
+                // Simple regex search (would need regex crate for full support)
+                if search_line.contains(&search_query) {
+                    if let Some(start) = search_line.find(&search_query) {
+                        let end = start + search_query.len();
+                        self.search_results.push(SearchResult {
+                            line_number: line_index + 1,
+                            column_start: start,
+                            column_end: end,
+                            line_content: line.to_string(),
+                            match_text: search_query.clone(),
+                        });
+                    }
+                }
+            } else {
+                // Simple text search
+                let mut start_pos = 0;
+                while let Some(pos) = search_line[start_pos..].find(&search_query) {
+                    let actual_pos = start_pos + pos;
+                    let end_pos = actual_pos + search_query.len();
+                    
+                    self.search_results.push(SearchResult {
+                        line_number: line_index + 1,
+                        column_start: actual_pos,
+                        column_end: end_pos,
+                        line_content: line.to_string(),
+                        match_text: line[actual_pos..end_pos].to_string(),
+                    });
+                    
+                    start_pos = actual_pos + 1;
+                }
+            }
+        }
+    }
+    
+    /// Navigate to next search result
+    fn next_search_result(&mut self) {
+        if !self.search_results.is_empty() {
+            self.current_search_index = (self.current_search_index + 1) % self.search_results.len();
+        }
+    }
+    
+    /// Navigate to previous search result
+    fn prev_search_result(&mut self) {
+        if !self.search_results.is_empty() {
+            if self.current_search_index == 0 {
+                self.current_search_index = self.search_results.len() - 1;
+            } else {
+                self.current_search_index -= 1;
+            }
+        }
+    }
+    
+    /// Get current search result for highlighting
+    fn get_current_search_result(&self) -> Option<&SearchResult> {
+        self.search_results.get(self.current_search_index)
+    }
+    
+    /// Replace current search result
+    fn replace_current(&mut self) {
+        if let Some(result) = self.get_current_search_result().cloned() {
+            let lines: Vec<&str> = self.toml_content.lines().collect();
+            if let Some(line) = lines.get(result.line_number - 1) {
+                let new_line = if self.search_is_case_sensitive {
+                    line.replace(&result.match_text, &self.replace_query)
+                } else {
+                    // Case-insensitive replace
+                    let line_lower = line.to_lowercase();
+                    let search_lower = self.search_query.to_lowercase();
+                    if let Some(pos) = line_lower.find(&search_lower) {
+                        let mut new_line = line.to_string();
+                        new_line.replace_range(pos..pos + search_lower.len(), &self.replace_query);
+                        new_line
+                    } else {
+                        line.to_string()
+                    }
+                };
+                
+                let mut new_lines = lines.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+                new_lines[result.line_number - 1] = new_line;
+                self.toml_content = new_lines.join("\n");
+                self.has_unsaved_changes = true;
+                
+                // Re-perform search to update results
+                self.perform_search();
+            }
+        }
+    }
+    
+    /// Replace all occurrences
+    fn replace_all(&mut self) {
+        if self.search_query.is_empty() || self.search_results.is_empty() {
+            return;
+        }
+        
+        if self.search_is_case_sensitive {
+            self.toml_content = self.toml_content.replace(&self.search_query, &self.replace_query);
+        } else {
+            // Case-insensitive replace all
+            let lines: Vec<&str> = self.toml_content.lines().collect();
+            let mut new_lines = Vec::new();
+            
+            for line in lines {
+                let line_lower = line.to_lowercase();
+                let search_lower = self.search_query.to_lowercase();
+                
+                if line_lower.contains(&search_lower) {
+                    let mut new_line = line.to_string();
+                    let mut start_pos = 0;
+                    while let Some(pos) = new_line[start_pos..].to_lowercase().find(&search_lower) {
+                        let actual_pos = start_pos + pos;
+                        new_line.replace_range(actual_pos..actual_pos + search_lower.len(), &self.replace_query);
+                        start_pos = actual_pos + self.replace_query.len();
+                    }
+                    new_lines.push(new_line);
+                } else {
+                    new_lines.push(line.to_string());
+                }
+            }
+            self.toml_content = new_lines.join("\n");
+        }
+        
+        self.has_unsaved_changes = true;
+        // Re-perform search to update results
+        self.perform_search();
     }
 }
 

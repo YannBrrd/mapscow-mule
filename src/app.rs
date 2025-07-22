@@ -449,7 +449,7 @@ impl eframe::App for MapscowMule {
                 }
             }
             
-            let (response, hover_pos) = self.map_view.show(ui, &self.map_data, &self.renderer, &self.style_manager, &self.gui_state);
+            let (response, hover_pos) = self.map_view.show(ui, &self.map_data, &self.renderer, &self.style_manager, &self.gui_state, self.gui_state.show_style_editor_modal);
             
             // Handle clear selection with keyboard shortcut in Select mode
             if self.gui_state.current_tool == Tool::Select {
